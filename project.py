@@ -34,12 +34,16 @@ print(extracted.allData["ham"][0])
 
 class spamClassifier:
     def __init__(self):
-        self.bagOfWords = None
+        self.bagOfWords = {"train": None, "test":None}
+        self.bagOfWordsFeatures = {"train": None, "test": None}
+        self.bernoulli = {"train":None, "test":None}
+        self.bernoulliFeatures = {"train":None, "test":None}
         # self.dataSetName = dataSetName
         # self.trainData = []
         # self.testData = []
     def _tokenizeText(self,text):
         tokens = word_tokenize(text)
+        # self.words = None
         tokens = [word.lower() for word in tokens if word.isalnum()]
         stopWords = set(stopwords.words('english'))
         tokens = [word for word in tokens if word not in stopWords]
@@ -49,7 +53,21 @@ class spamClassifier:
         YHam = np.ones(len(rawText["ham"]))
         catList = rawText["spam"] + rawText["ham"]
         tokenizedData = [self._tokenizeText(email) for email in catList]
+        return tokenizedData, np.concatenate(YSpam, YHam).T
+    def _bagOfWords(self, tokenizedData, Y, trainOrTest):
+        vectorizer = CountVectorizer()
         X = vectorizer.fit_transform([' '.join(email) for email in tokenizedData])
-        self.bagOfWords = np.hstack((X, np.concatenate(YSpam, YHam).T))
+        self.bagOfWords[trainOrTest] = np.hstack((X, Y))
+        self.bagOfWordsFeatures[trainOrTest] = vectorizer.get_feature_names_out()
+    def _bernoulli(self, tokenizedData, Y, trainOrTest):
+        vectorizer = CountVectorizer(binary=True)
+        X = vectorizer.fit_transform([' '.join(email) for email in tokenizedData])
+        self.bernoulli[trainOrTest] = np.hstack((X, Y))
+        self.bernoulliFeatures[trainOrTest] = vectorizer.get_feature_names_out()
+    def createRepresentations(self, rawText, trainOrTest):
+        tokenizedData, Y = self._processData(rawText)
+        self._bagOfWords(tokenizedData, Y, trainOrTest)
+        self.bernoulli(tokenizedData, Y, trainOrTest)
+        
 
         
