@@ -10,56 +10,46 @@ from sklearn.feature_extraction.text import CountVectorizer
 class dataExtracter:
     def __init__(self, zipName):
         self.allData = {"spam": [], "ham": []}
-        self.spamData = []
-        self.hamData = []
         self.folderName = zipName.lower()
         self.zipPath = os.path.join("./", self.folderName+".zip")
-    def extractFile():
+        self._extractFile()
+        self._moveZipToRoot()
+    def _extractFile(self):
         with zipfile.ZipFile(self.zipPath, "r") as folder:
             folder.extractall("./")
-    def moveZipToRoot():
+    def _moveZipToRoot(self):
         for fileName in os.listdir(os.path.join("./",self.folderName)):
             shutil.move(os.path.join("./" + self.folderName, fileName), os.path.join("./", fileName))
-    def readData(dataSetName, trainOrTest, spamOrHam):
+    def readData(self,dataSetName, trainOrTest, spamOrHam):
         with zipfile.ZipFile(os.path.join("./", dataSetName.lower()+"_"+trainOrTest.lower()+".zip"), "r") as zipRef:
-            fils = [f for f in zipRef.namelist() if f.endswith(spamOrHam.lower()+".txt")]
+            files = [f for f in zipRef.namelist() if f.endswith(spamOrHam.lower()+".txt")]
             for file in files:
                 self.allData[spamOrHam.lower()].append(io.TextIOWrapper(zipRef.open(file), encoding='iso-8859-1', newline='').read())
-        
-# extractFile("./project1_datasets.zip")
-# moveZipsToRoot("project1_datasets")
 
-# with zipfile.ZipFile("./project1_datasets.zip", "r") as zipRef:
-#     print(zipRef.namelist())
-# spamData = []
-# hamData = []
-# with zipfile.ZipFile("./enron1_train.zip", "r") as zipRef:
-#     spamFiles = [f for f in zipRef.namelist() if f.endswith("spam.txt")]
-#     hamFiles = [f for f in zipRef.namelist() if f.endswith("ham.txt")]
-#     for file in spamFiles:
-#         spamData.append(io.TextIOWrapper(zipRef.open(file), encoding='iso-8859-1', newline='').read())
-#     for file in hamFiles:
-#         hamData.append(io.TextIOWrapper(zipRef.open(file), encoding='iso-8859-1', newline='').read())
-    
-    # for innerFile in zipFiles:
-    #     innerFileData = zipRef.read(innerFile)
-    #     print(innerFileData)
-    #     innerZip = zipfile.ZipFile(innerFileData, 'r')
-    #     spamFiles = [f for f in innerZip.namelist() if f.endswith("spam.txt")]
-    #     hamFiles = [f for f in innerZip.namelist() if f.endswith("ham.txt")]
-    #     for file in spamFiles:
-    #         spamData.append(innerZip.read(file, "r"))
-    #     for file in hamFiles:
-    #         hamData.append(innerZip.read(file, "r"))
-
-
+extracted = dataExtracter("project1_datasets")
+extracted.readData("enron1", "train", "spam")
+extracted.readData("enron1", "train", "ham")
+print(extracted.allData["spam"][0])
+print(extracted.allData["ham"][0])
 
 class spamClassifier:
-    def __init__(self, dataSetName):
-        self.dataSetName = dataSetName
-        self.trainData = []
-        self.testData = []
-    def readZipFile():
-        zipFiles = [f for f in os.listdir("./") if f.startswith(self.dataSetName)]
-        pass
-    
+    def __init__(self):
+        self.bagOfWords = None
+        # self.dataSetName = dataSetName
+        # self.trainData = []
+        # self.testData = []
+    def _tokenizeText(self,text):
+        tokens = word_tokenize(text)
+        tokens = [word.lower() for word in tokens if word.isalnum()]
+        stopWords = set(stopwords.words('english'))
+        tokens = [word for word in tokens if word not in stopWords]
+        return tokens
+    def _processData(self, rawText):
+        YSpam = np.ones(len(rawText["spam"]))
+        YHam = np.ones(len(rawText["ham"]))
+        catList = rawText["spam"] + rawText["ham"]
+        tokenizedData = [self._tokenizeText(email) for email in catList]
+        X = vectorizer.fit_transform([' '.join(email) for email in tokenizedData])
+        self.bagOfWords = np.hstack((X, np.concatenate(YSpam, YHam).T))
+
+        
