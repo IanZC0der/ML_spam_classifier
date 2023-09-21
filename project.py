@@ -52,8 +52,6 @@ class dataExtracter:
     #     for file in hamFiles:
     #         hamData.append(innerZip.read(file, "r"))
 
-print(spamData[0])
-print(hamData[0])
 
 
 class spamClassifier:
