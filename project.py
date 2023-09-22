@@ -88,7 +88,7 @@ class multiNomialNB:
         self.data = rep
         self.predictions = None
     def train(self):
-        classes, counts = np.unique(self.data.bagOfWords["train"][:,-1])
+        classes, counts = np.unique(self.data.bagOfWords["train"][:,-1], return_counts = True)
         for OneClass, count in zip(classes, counts):
             self.priorCounts[OneClass] = count
             self.priorsProb[OneClass] = np.log(count/len(self.data.bagOfWords["train"][:,-1]))
@@ -115,3 +115,47 @@ class multiNomialNB:
                     predicted = oneClass
             predictions.append(predicted)
         self.predictions = np.array(predictons).T
+
+
+class bernoulliNB:
+    def __init__(self,rep):
+        self.priorsProb = {1:None, 0:None}
+        self.priorCounts = {1:None, 0:None}
+        self.condProb = {1:[], 0:[]}
+        self.data = rep
+        self.switchedKeyValTrain = {val: key for key, val in self.data.bernoulliIndexedFeatures["train"]}
+        self.switchedKeyValTest = {val:key for key, val in self.data.bernoulliIndexedFeatures["test"]}
+        self.predictions = None
+    def train(self):
+        classes, counts = np.unique(self.data.bernoulli["train"][:,-1], return_counts = True)
+        for OneClass, count in zip(classes, counts):
+            self.priorCounts[OneClass] = count
+            self.priorsProb[OneClass] = np.log(count/len(self.data.bernoulli["train"][:,-1]))
+        lengthOfVoca = len(self.data.bernoulliFeatures["train"])
+        for i in range(lengthOfVoca):
+            self.condProb[1].append((np.sum(self.data.bernoulli["train"][:self.priorCounts[1], i]) + 1) / (self.condProb[1] + 2))
+            self.condProb[0].append((np.sum(self.data.bernoulli["train"][self.priorCounts[1]:, i]) + 1) / (self.condProb[0] + 2))
+    
+    def test(self):
+        predictons = []
+        # ignore the unseen words in the test data
+        # priors = {1: self.priorsProb[1], 0: self.priorsProb[0]}
+        # for i, word in self.rep.bagOfWordsIndexedFeatures["test"].items():
+        #     if word in self.rep.bagOfWordsIndexedFeatures["train"]:
+        for i in range(self.data.bernoulli["test"].shape[0]):
+            maxProb = -np.inf
+            predicted = None
+            for oneClass, prior in self.priorsProb.items():
+                prob = prior
+                for i, word in self.switchedKeyValTrain.items():
+                    if word in self.switchedKeyValTest:
+                        prob += np.log(self.condProb[oneClass][i])
+                    else:
+                        prob += np.log(1-self.condProb[oneClass][i])
+                if prob > maxProb:
+                    maxProb = prob
+                    predicted = oneClass
+            predictions.append(predicted)
+        self.predictions = np.array(predictons).T
+    
+    
