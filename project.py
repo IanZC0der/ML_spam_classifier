@@ -69,11 +69,6 @@ class modelCreator:
         # create the bag of words representation
         vectorizer = CountVectorizer()
         X = vectorizer.fit_transform([' '.join(email) for email in tokenizedData])
-        # print(type(Y))
-        print(Y.shape[0])
-        print(X.shape[0])
-        print(X.shape[1])
-        # print(Y)
         X_dense = X.toarray()
         Y_reshaped = Y.reshape(-1, 1)
         self.bagOfWords[trainOrTest] = np.concatenate((X_dense, Y_reshaped), axis=1)
@@ -98,23 +93,6 @@ class modelCreator:
             self._bernoulli(tokenizedData, Y, trainOrTest)
         
 
-def testFunction():
-    extracted = dataExtracter("project1_datasets")
-    extracted.readData()
-    dataSet1 = extracted.allData["enron1"]
-    dataSet1Rep = modelCreator()
-    dataSet1Rep.createRepresentations(dataSet1)
-    print(len(dataSet1Rep.bagOfWords["train"][:, 0]))
-    print((len(dataSet1["train"]["spam"])+len(dataSet1["train"]["ham"])))
-    print(len(dataSet1Rep.bagOfWordsFeatures["train"]))
-    print(len(dataSet1Rep.bagOfWordsIndexedFeatures["train"]))
-    print(len(dataSet1Rep.bagOfWordsFeatures["test"]))
-    print(len(dataSet1Rep.bagOfWordsIndexedFeatures["test"]))
-
-    allZipFiles = glob.glob(os.path.join("./", "enron*"))
-    print(allZipFiles)
-    
-testFunction()
 
 # multinomial NB model with add-one smoothing
 class multiNomialNB:
@@ -134,11 +112,8 @@ class multiNomialNB:
             self.condProb[1].append((np.sum(self.data.bagOfWords["train"][:self.priorCounts[1], i]) + 1) /np.sum(self.data.bagOfWords["train"][:self.priorCounts[1], :-1]))
             self.condProb[0].append((np.sum(self.data.bagOfWords["train"][self.priorCounts[1]:, i]) + 1) /np.sum(self.data.bagOfWords["train"][self.priorCounts[1]:, :-1]))
     def test(self):
-        predictons = []
+        predictions = []
         # ignore the unseen words in the test data
-        # priors = {1: self.priorsProb[1], 0: self.priorsProb[0]}
-        # for i, word in self.rep.bagOfWordsIndexedFeatures["test"].items():
-        #     if word in self.rep.bagOfWordsIndexedFeatures["train"]:
         for i in range(self.data.bagOfWords["test"].shape[0]):
             maxProb = -np.inf
             predicted = None
@@ -151,8 +126,43 @@ class multiNomialNB:
                     maxProb = prob
                     predicted = oneClass
             predictions.append(predicted)
-        self.predictions = np.array(predictons).T
+        self.predictions = np.array(predictions)
 
+def testFunction():
+    extracted = dataExtracter("project1_datasets")
+    extracted.readData()
+    dataSet1 = extracted.allData["enron1"]
+    dataSet1Rep = modelCreator()
+    dataSet1Rep.createRepresentations(dataSet1)
+    multiNB1 = multiNomialNB(dataSet1Rep)
+    multiNB1.train()
+    multiNB1.test()
+    # print(1 - abs(multiNB1.data.bagOfWords["test"][:, -1] - multiNB1.predictions)/len(multiNB1.predictions))
+    count = 0
+    for i in range(len(multiNB1.predictions)):
+        if multiNB1.predictions[i] == multiNB1.data.bagOfWords["test"][i,-1]:
+            count += 1
+    print(count/len(multiNB1.predictions))
+
+            
+    # print(len(dataSet1Rep.bagOfWords["train"][:, 0]))
+    # print((len(dataSet1["train"]["spam"])+len(dataSet1["train"]["ham"])))
+    # print(len(set(dataSet1Rep.bagOfWordsFeatures["train"])))
+    # print(len(dataSet1Rep.bagOfWordsIndexedFeatures["train"]))
+    # print(len(set(dataSet1Rep.bagOfWordsFeatures["test"])))
+    # print(len(dataSet1Rep.bagOfWordsIndexedFeatures["test"]))
+
+    # remove the zip files and empty folder
+
+    allZipFiles = glob.glob(os.path.join("./", "enron*")) + glob.glob(os.path.join("./", "*sets"))
+    # folder = glob.glob(os.path.join("./", "project1*"))
+    for aFile in allZipFiles:
+        if aFile.endswith("datasets"):
+            os.rmdir(aFile)
+        else:
+            os.remove(aFile)
+    
+testFunction()
 
 class bernoulliNB:
     def __init__(self,rep):
@@ -174,7 +184,7 @@ class bernoulliNB:
             self.condProb[0].append((np.sum(self.data.bernoulli["train"][self.priorCounts[1]:, i]) + 1) / (self.condProb[0] + 2))
     
     def test(self):
-        predictons = []
+        predictions = []
         # ignore the unseen words in the test data
         # priors = {1: self.priorsProb[1], 0: self.priorsProb[0]}
         # for i, word in self.rep.bagOfWordsIndexedFeatures["test"].items():
@@ -193,6 +203,6 @@ class bernoulliNB:
                     maxProb = prob
                     predicted = oneClass
             predictions.append(predicted)
-        self.predictions = np.array(predictons).T
+        self.predictions = np.array(predictions)
     
     
