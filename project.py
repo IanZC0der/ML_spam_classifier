@@ -169,9 +169,51 @@ class bernoulliNB:
                     maxProb = prob
                     predicted = oneClass
             predictions.append(predicted)
-        self.predictions = np.array(predictions)
+        self.predictions = np.array(predictions) 
+
+class mcapLR:
+    def __init__(self, rep):
+        self.data = rep
+        self.trainDataBagOfWords = np.concatenate((np.ones(self.data.bagOfWords["train"].shape[0], dtype=int).reshape(-1, 1), self.data.bagOfWords["train"]))
+        self.testDataBagOfWords = self._testDataAlignment(rep.bagOfWords, rep.bagOfWordsIndexedFeatures)
+        self.trainDataBernoulli = np.concatenate((np.ones(self.data.bernoulli["train"].shape[0], dtype=int).reshape(-1, 1), self.data.bernoulli["train"]))
+        self.testDataBernoulli = self._testDataAlignment(rep.bernoulli, rep.bernoulliIndexedFeatures)
+        self.lambdaCandidates = [0.02, 0.04, 0.06, 0.08, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+        self.iterationsCandidates = [50,100,200,400,800,1600]
+        self.defaultLearningRate = 0.1
+        self.defaultlambda = 0.1
+        self.defaultIterations = 70
     
- 
+    def _testDataAlignment(self, dataModel, indexedFeatures):
+        lookUpdic = {val: key for key, val in indexedFeatures["test"].items()}
+        newMatrix = np.ones(dataModel["test"].shape[0], dtype=int).reshape(-1, 1)
+        for word, index in indexedFeatures["train"].items():
+            if word in lookUpdic:
+                newMatrix = np.concatenate((newMatrix, dataMode["test"][:, lookUpdic[word]]))
+        return newMatrix
+    def _sigmoid(self, product):
+        return np.exp(product)/(1 + np.exp(product))
+    
+    def train(self, trainData):
+        Loss = []
+        weights = np.random.uniform((-0.05, 0.05), trainData.shape[1] - 1)
+        for _ in range(self.defaultIterations):
+            P = self._sigmoid(np.dot(weights, trainData[:, :-1]))
+            weights = weights + self.defaultLearningRate * np.dot(trainData[:, :-1], P) - self.defaultLearningRate * self.defaultlambda * weights
+            Loss.append(np.sum(np.dot(trainData[:, -1], np.dot(weights, trainData[:, :-1])) - np.log(1+np.exp(np.dot(weights, trainData[:, :-1])))) - self.defaultlambda * np.sum(np.square(weights)))
+        return weights, Loss
+    def validation(self, weights, validationData):
+        predictions = (np.dot(weights, validationData[:, :-1])>0).astype(int)
+        count = 0
+        for i in range(len(predictions)):
+            if predictions[i] == validationData[i,-1]:
+                count += 1
+        print(count/len(predictions))
+        
+        
+        
+        
+        
 def testFunction():
     def accuracy(dataSet, mOrb):
         count = 0
@@ -197,25 +239,16 @@ def testFunction():
     dataSet1 = extracted.allData["enron1"]
     dataSet1Rep = modelCreator()
     dataSet1Rep.createRepresentations(dataSet1)
-    multiNB1 = multiNomialNB(dataSet1Rep)
-    multiNB1.train()
-    multiNB1.test()
-    berNB1 = bernoulliNB(dataSet1Rep)
-    berNB1.train()
-    berNB1.test()
-    accuracy(multiNB1, "m")
-    accuracy(berNB1, "b")
-    # print(1 - abs(multiNB1.data.bagOfWords["test"][:, -1] - multiNB1.predictions)/len(multiNB1.predictions))
+    # multiNB1 = multiNomialNB(dataSet1Rep)
+    # multiNB1.train()
+    # multiNB1.test()
+    # berNB1 = bernoulliNB(dataSet1Rep)
+    # berNB1.train()
+    # berNB1.test()
+    # accuracy(multiNB1, "m")
+    # accuracy(berNB1, "b")
+    # test the MCAP LR
 
-            
-    # print(len(dataSet1Rep.bagOfWords["train"][:, 0]))
-    # print((len(dataSet1["train"]["spam"])+len(dataSet1["train"]["ham"])))
-    # print(len(set(dataSet1Rep.bagOfWordsFeatures["train"])))
-    # print(len(dataSet1Rep.bagOfWordsIndexedFeatures["train"]))
-    # print(len(set(dataSet1Rep.bagOfWordsFeatures["test"])))
-    # print(len(dataSet1Rep.bagOfWordsIndexedFeatures["test"]))
-
-    # remove the zip files and empty folder
 
     
 testFunction()
