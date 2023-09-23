@@ -128,41 +128,6 @@ class multiNomialNB:
             predictions.append(predicted)
         self.predictions = np.array(predictions)
 
-def testFunction():
-    extracted = dataExtracter("project1_datasets")
-    extracted.readData()
-    dataSet1 = extracted.allData["enron1"]
-    dataSet1Rep = modelCreator()
-    dataSet1Rep.createRepresentations(dataSet1)
-    multiNB1 = multiNomialNB(dataSet1Rep)
-    multiNB1.train()
-    multiNB1.test()
-    # print(1 - abs(multiNB1.data.bagOfWords["test"][:, -1] - multiNB1.predictions)/len(multiNB1.predictions))
-    count = 0
-    for i in range(len(multiNB1.predictions)):
-        if multiNB1.predictions[i] == multiNB1.data.bagOfWords["test"][i,-1]:
-            count += 1
-    print(count/len(multiNB1.predictions))
-
-            
-    # print(len(dataSet1Rep.bagOfWords["train"][:, 0]))
-    # print((len(dataSet1["train"]["spam"])+len(dataSet1["train"]["ham"])))
-    # print(len(set(dataSet1Rep.bagOfWordsFeatures["train"])))
-    # print(len(dataSet1Rep.bagOfWordsIndexedFeatures["train"]))
-    # print(len(set(dataSet1Rep.bagOfWordsFeatures["test"])))
-    # print(len(dataSet1Rep.bagOfWordsIndexedFeatures["test"]))
-
-    # remove the zip files and empty folder
-
-    allZipFiles = glob.glob(os.path.join("./", "enron*")) + glob.glob(os.path.join("./", "*sets"))
-    # folder = glob.glob(os.path.join("./", "project1*"))
-    for aFile in allZipFiles:
-        if aFile.endswith("datasets"):
-            os.rmdir(aFile)
-        else:
-            os.remove(aFile)
-    
-testFunction()
 
 class bernoulliNB:
     def __init__(self,rep):
@@ -170,8 +135,8 @@ class bernoulliNB:
         self.priorCounts = {1:None, 0:None}
         self.condProb = {1:[], 0:[]}
         self.data = rep
-        self.switchedKeyValTrain = {val: key for key, val in self.data.bernoulliIndexedFeatures["train"]}
-        self.switchedKeyValTest = {val:key for key, val in self.data.bernoulliIndexedFeatures["test"]}
+        self.switchedKeyValTrain = {val: key for key, val in self.data.bernoulliIndexedFeatures["train"].items()}
+        self.switchedKeyValTest = {val:key for key, val in self.data.bernoulliIndexedFeatures["test"].items()}
         self.predictions = None
     def train(self):
         classes, counts = np.unique(self.data.bernoulli["train"][:,-1], return_counts = True)
@@ -180,8 +145,8 @@ class bernoulliNB:
             self.priorsProb[OneClass] = np.log(count/len(self.data.bernoulli["train"][:,-1]))
         lengthOfVoca = len(self.data.bernoulliFeatures["train"])
         for i in range(lengthOfVoca):
-            self.condProb[1].append((np.sum(self.data.bernoulli["train"][:self.priorCounts[1], i]) + 1) / (self.condProb[1] + 2))
-            self.condProb[0].append((np.sum(self.data.bernoulli["train"][self.priorCounts[1]:, i]) + 1) / (self.condProb[0] + 2))
+            self.condProb[1].append((np.sum(self.data.bernoulli["train"][:self.priorCounts[1], i]) + 1) / (self.priorCounts[1] + 2))
+            self.condProb[0].append((np.sum(self.data.bernoulli["train"][self.priorCounts[1]:, i]) + 1) / (self.priorCounts[0] + 2))
     
     def test(self):
         predictions = []
@@ -194,15 +159,63 @@ class bernoulliNB:
             predicted = None
             for oneClass, prior in self.priorsProb.items():
                 prob = prior
-                for i, word in self.switchedKeyValTrain.items():
-                    if self.bernoulli["test"][i][self.switchedKeyValTest[word]]:
-                        prob += np.log(self.condProb[oneClass][i])
+                for j, word in self.switchedKeyValTrain.items():
+                    if word in self.switchedKeyValTest:
+                        if self.data.bernoulli["test"][i,self.switchedKeyValTest[word]]:
+                            prob += np.log(self.condProb[oneClass][j])
                     else:
-                        prob += np.log(1-self.condProb[oneClass][i])
+                        prob += np.log(1-self.condProb[oneClass][j])
                 if prob > maxProb:
                     maxProb = prob
                     predicted = oneClass
             predictions.append(predicted)
         self.predictions = np.array(predictions)
     
+ 
+def testFunction():
+    def accuracy(dataSet, mOrb):
+        count = 0
+        if mOrb == "m":
+            for i in range(len(dataSet.predictions)):
+                if dataSet.predictions[i] == dataSet.data.bagOfWords["test"][i,-1]:
+                    count += 1
+        else:
+            for i in range(len(dataSet.predictions)):
+                if dataSet.predictions[i] == dataSet.data.bernoulli["test"][i,-1]:
+                    count += 1
+            
+        print(count/len(dataSet.predictions))
+    extracted = dataExtracter("project1_datasets")
+    extracted.readData()
+    allZipFiles = glob.glob(os.path.join("./", "enron*")) + glob.glob(os.path.join("./", "*sets"))
+    # folder = glob.glob(os.path.join("./", "project1*"))
+    for aFile in allZipFiles:
+        if aFile.endswith("datasets"):
+            os.rmdir(aFile)
+        else:
+            os.remove(aFile)
+    dataSet1 = extracted.allData["enron1"]
+    dataSet1Rep = modelCreator()
+    dataSet1Rep.createRepresentations(dataSet1)
+    multiNB1 = multiNomialNB(dataSet1Rep)
+    multiNB1.train()
+    multiNB1.test()
+    berNB1 = bernoulliNB(dataSet1Rep)
+    berNB1.train()
+    berNB1.test()
+    accuracy(multiNB1, "m")
+    accuracy(berNB1, "b")
+    # print(1 - abs(multiNB1.data.bagOfWords["test"][:, -1] - multiNB1.predictions)/len(multiNB1.predictions))
+
+            
+    # print(len(dataSet1Rep.bagOfWords["train"][:, 0]))
+    # print((len(dataSet1["train"]["spam"])+len(dataSet1["train"]["ham"])))
+    # print(len(set(dataSet1Rep.bagOfWordsFeatures["train"])))
+    # print(len(dataSet1Rep.bagOfWordsIndexedFeatures["train"]))
+    # print(len(set(dataSet1Rep.bagOfWordsFeatures["test"])))
+    # print(len(dataSet1Rep.bagOfWordsIndexedFeatures["test"]))
+
+    # remove the zip files and empty folder
+
     
+testFunction()
