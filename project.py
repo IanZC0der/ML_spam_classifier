@@ -174,9 +174,11 @@ class bernoulliNB:
 class mcapLR:
     def __init__(self, rep):
         self.data = rep
-        self.trainDataBagOfWords = np.concatenate((np.ones(self.data.bagOfWords["train"].shape[0], dtype=int).reshape(-1, 1), self.data.bagOfWords["train"]))
+        Y1 = np.ones(self.data.bagOfWords["train"].shape[0], dtype=int).reshape(-1, 1)
+        self.trainDataBagOfWords = np.hstack((Y1, self.data.bagOfWords["train"]))
         self.testDataBagOfWords = self._testDataAlignment(rep.bagOfWords, rep.bagOfWordsIndexedFeatures)
-        self.trainDataBernoulli = np.concatenate((np.ones(self.data.bernoulli["train"].shape[0], dtype=int).reshape(-1, 1), self.data.bernoulli["train"]))
+        Y2 = np.ones(self.data.bernoulli["train"].shape[0], dtype=int).reshape(-1, 1)
+        self.trainDataBernoulli = np.hstack((Y2, self.data.bernoulli["train"]))
         self.testDataBernoulli = self._testDataAlignment(rep.bernoulli, rep.bernoulliIndexedFeatures)
         self.lambdaCandidates = [0.02, 0.04, 0.06, 0.08, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
         self.iterationsCandidates = [50,100,200,400,800,1600]
@@ -189,7 +191,7 @@ class mcapLR:
         newMatrix = np.ones(dataModel["test"].shape[0], dtype=int).reshape(-1, 1)
         for word, index in indexedFeatures["train"].items():
             if word in lookUpdic:
-                newMatrix = np.concatenate((newMatrix, dataMode["test"][:, lookUpdic[word]]))
+                newMatrix = np.hstack((newMatrix, dataModel["test"][:, lookUpdic[word]].reshape(-1, 1)))
         return newMatrix
     def _sigmoid(self, product):
         return np.exp(product)/(1 + np.exp(product))
@@ -239,6 +241,11 @@ def testFunction():
     dataSet1 = extracted.allData["enron1"]
     dataSet1Rep = modelCreator()
     dataSet1Rep.createRepresentations(dataSet1)
+    LR1 = mcapLR(dataSet1Rep)
+    print(LR1.trainDataBagOfWords.shape)
+    print(LR1.testDataBagOfWords.shape)
+    print(LR1.trainDataBernoulli.shape)
+    print(LR1.testDataBernoulli.shape)
     # multiNB1 = multiNomialNB(dataSet1Rep)
     # multiNB1.train()
     # multiNB1.test()
