@@ -1,6 +1,7 @@
 import zipfile
 import os
 import io
+import glob
 import numpy as np 
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
@@ -31,17 +32,18 @@ class dataExtracter:
                         for file in files:
                             self.allData[dataSetName][trainOrTest][spamOrHam.lower()].append(io.TextIOWrapper(zipRef.open(file), encoding='iso-8859-1', newline='').read())
 
-# extracted = dataExtracter("project1_datasets")
-# extracted.readData()
 class modelCreator:
     def __init__(self):
+        # create the bag of word representation. 
         self.bagOfWords = {"train": None, "test":None}
         self.bagOfWordsFeatures = {"train": None, "test": None}
         self.bagOfWordsIndexedFeatures = {"train": None, "test":None}
+        # create the bernoulli representation
         self.bernoulli = {"train":None, "test":None}
         self.bernoulliFeatures = {"train":None, "test":None}
         self.bernoulliIndexedFeatures = {"train": None, "test":None}
     def _createVocab(self, rawFeatures, trainOrTest):
+        # create the indexed words. Notice that in the train dictionary, the key is the word and value is the index but in the dictionary for test data, it's the opposite. This is for the convenience of lookup
         if trainOrTest == "train":
             newDic = {word:i for i, word in enumerate(rawFeatures[trainOrTest])}
             return newDic
@@ -49,35 +51,70 @@ class modelCreator:
             newDic = {i:word for i, word in enumerate(rawFeatures[trainOrTest])}
             return newDic
     def _tokenizeText(self,text):
+        # tokenize the email
         tokens = word_tokenize(text)
         tokens = [word.lower() for word in tokens if word.isalnum()]
         stopWords = set(stopwords.words('english'))
         tokens = [word for word in tokens if word not in stopWords]
         return tokens
     def _processData(self, rawText):
-        YSpam = np.ones(len(rawText["spam"]))
-        YHam = np.zeros(len(rawText["ham"]))
+        # create a column of y values. For spam emails their values are 1.
+        YSpam = np.ones(len(rawText["spam"]), dtype=int)
+        YHam = np.zeros(len(rawText["ham"]), dtype=int)
         catList = rawText["spam"] + rawText["ham"]
         tokenizedData = [self._tokenizeText(email) for email in catList]
-        return tokenizedData, np.concatenate(YSpam, YHam).T
+        Y = np.concatenate((YSpam, YHam))
+        return [tokenizedData, Y]
     def _bagOfWords(self, tokenizedData, Y, trainOrTest):
+        # create the bag of words representation
         vectorizer = CountVectorizer()
         X = vectorizer.fit_transform([' '.join(email) for email in tokenizedData])
-        self.bagOfWords[trainOrTest] = np.hstack((X, Y))
+        # print(type(Y))
+        print(Y.shape[0])
+        print(X.shape[0])
+        print(X.shape[1])
+        # print(Y)
+        X_dense = X.toarray()
+        Y_reshaped = Y.reshape(-1, 1)
+        self.bagOfWords[trainOrTest] = np.concatenate((X_dense, Y_reshaped), axis=1)
         self.bagOfWordsFeatures[trainOrTest] = vectorizer.get_feature_names_out()
         self.bagOfWordsIndexedFeatures[trainOrTest] = self._createVocab(self.bagOfWordsFeatures, trainOrTest)
     def _bernoulli(self, tokenizedData, Y, trainOrTest):
+        # create the bernoulli representation
         vectorizer = CountVectorizer(binary=True)
         X = vectorizer.fit_transform([' '.join(email) for email in tokenizedData])
-        self.bernoulli[trainOrTest] = np.hstack((X, Y))
+        X_dense = X.toarray()
+        Y_reshaped = Y.reshape(-1, 1)
+        self.bernoulli[trainOrTest] = np.concatenate((X_dense, Y_reshaped), axis=1)
         self.bernoulliFeatures[trainOrTest] = vectorizer.get_feature_names_out()
         self.bernoulliIndexedFeatures[trainOrTest] = self._createVocab(self.bernoulliFeatures, trainOrTest)
-    def createRepresentations(self, rawText, trainOrTest):
+    def createRepresentations(self, rawText):
+        # invoke the methods for creating the representations
+        tokenizedData = None
+        Y = None
         for trainOrTest in ["train", "test"]:
-            tokenizedData, Y = self._processData(rawText[trainOrTest])
+            [tokenizedData, Y] = self._processData(rawText[trainOrTest])
             self._bagOfWords(tokenizedData, Y, trainOrTest)
             self._bernoulli(tokenizedData, Y, trainOrTest)
         
+
+def testFunction():
+    extracted = dataExtracter("project1_datasets")
+    extracted.readData()
+    dataSet1 = extracted.allData["enron1"]
+    dataSet1Rep = modelCreator()
+    dataSet1Rep.createRepresentations(dataSet1)
+    print(len(dataSet1Rep.bagOfWords["train"][:, 0]))
+    print((len(dataSet1["train"]["spam"])+len(dataSet1["train"]["ham"])))
+    print(len(dataSet1Rep.bagOfWordsFeatures["train"]))
+    print(len(dataSet1Rep.bagOfWordsIndexedFeatures["train"]))
+    print(len(dataSet1Rep.bagOfWordsFeatures["test"]))
+    print(len(dataSet1Rep.bagOfWordsIndexedFeatures["test"]))
+
+    allZipFiles = glob.glob(os.path.join("./", "enron*"))
+    print(allZipFiles)
+    
+testFunction()
 
 # multinomial NB model with add-one smoothing
 class multiNomialNB:
@@ -148,7 +185,7 @@ class bernoulliNB:
             for oneClass, prior in self.priorsProb.items():
                 prob = prior
                 for i, word in self.switchedKeyValTrain.items():
-                    if word in self.switchedKeyValTest:
+                    if self.bernoulli["test"][i][self.switchedKeyValTest[word]]:
                         prob += np.log(self.condProb[oneClass][i])
                     else:
                         prob += np.log(1-self.condProb[oneClass][i])
