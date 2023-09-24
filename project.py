@@ -176,7 +176,7 @@ class bernoulliNB:
         self.predictions = np.array(predictions) 
 
 class mcapLR:
-    def __init__(self, rep):
+    def __init__(self, rep, dataSetPrefix):
         self.data = rep
         # Y1 = np.ones(self.data.bagOfWords["train"].shape[0], dtype=int).reshape(-1, 1)
         # self.trainDataBagOfWords = np.hstack((Y1, self.data.bagOfWords["train"]))
@@ -194,6 +194,9 @@ class mcapLR:
         self.defaultLearningRate = 0.1
         self.defaultlambda = 0.02
         self.defaultIterations = 1000
+        self._counter = 0
+        self._plotNames = ["BagOfWords_ParametersTuning.png", "Bernoulli_ParametersTuning.png"]
+        self._dataSetPrefix = dataSetPrefix
     
     def _dataAlignment(self, dataModel, indexedFeatures):
         lookUpdic = {val: key for key, val in indexedFeatures["test"].items()}
@@ -252,14 +255,18 @@ class mcapLR:
                     for l in range(5):
                         tempList[l].append(tuningParameters[i][j][k][l])
         X = np.arange(len(XAxis))
-        plotLabels = ['CLL', 'Accuracy', 'Precision', 'Recall', 'F-score']
-        fig, axs = plt.subplots(5, 1, sharex=True, figsize=(8, 10))
+        plotLabels = ["CLL", "Accuracy", "Precision", "Recall", "F-score"]
+        fig, axs = plt.subplots(5, 1, sharex=True, figsize=(10, 14))
         for i, val in enumerate(plotLabels):
             axs[i].plot(X, tempList[i], color="g", label=val)
+            axs[i].set_ylabel(plotLabels[i])
         axs[-1].set_xticks(X)
-        axs[-1].set_xticklabels(XAxis, rotation=45) 
+        axs[-1].set_xticklabels(XAxis, rotation=90) 
+        
         plt.tight_layout()
-        plt.show()
+        plt.savefig(f"./{self._dataSetPrefix}+{self._plotNames[self._counter]}")
+        self._counter += 1
+        plt.close()
         
                     
     
@@ -279,8 +286,8 @@ class mcapLR:
         #         count += 1
         # print(count/len(predictions))
         accuracy = accuracy_score(validationData[:, -1], predictions)
-        precision, recall, fscore, support = precision_recall_fscore_support(validationData[:, -1], predictions)
-        return accuracy, np.mean(precision), np.mean(recall), np.mean(fscore)
+        precision, recall, fscore, support = precision_recall_fscore_support(validationData[:, -1], predictions, average="binary")
+        return accuracy, precision, recall, fscore
 
 def testFunction():
     def accuracy(dataSet, mOrb):
@@ -307,7 +314,7 @@ def testFunction():
     dataSet1 = extracted.allData["enron1"]
     dataSet1Rep = modelCreator()
     dataSet1Rep.createRepresentations(dataSet1)
-    LR1 = mcapLR(dataSet1Rep)
+    LR1 = mcapLR(dataSet1Rep, "enron1")
     LR1.gridSearch(LR1.trainDataBagOfWords, LR1.bagOfWordParametersTuning)
     LR1.gridSearch(LR1.trainDataBernoulli, LR1.bernoulliParametersTuning)
     LR1.plotting(LR1.bagOfWordParametersTuning)
