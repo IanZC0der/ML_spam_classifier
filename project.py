@@ -7,6 +7,10 @@ from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 import shutil
 from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import precision_recall_fscore_support
+from sklearn.metrics import accuracy_score
+import matplotlib.pyplot as plt
 
 class dataExtracter:
     def __init__(self, zipName):
@@ -174,43 +178,83 @@ class bernoulliNB:
 class mcapLR:
     def __init__(self, rep):
         self.data = rep
-        Y1 = np.ones(self.data.bagOfWords["train"].shape[0], dtype=int).reshape(-1, 1)
-        self.trainDataBagOfWords = np.hstack((Y1, self.data.bagOfWords["train"]))
-        self.testDataBagOfWords = self._testDataAlignment(rep.bagOfWords, rep.bagOfWordsIndexedFeatures)
-        Y2 = np.ones(self.data.bernoulli["train"].shape[0], dtype=int).reshape(-1, 1)
-        self.trainDataBernoulli = np.hstack((Y2, self.data.bernoulli["train"]))
-        self.testDataBernoulli = self._testDataAlignment(rep.bernoulli, rep.bernoulliIndexedFeatures)
-        self.lambdaCandidates = [0.02, 0.04, 0.06, 0.08, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
-        self.iterationsCandidates = [50,100,200,400,800,1600]
+        # Y1 = np.ones(self.data.bagOfWords["train"].shape[0], dtype=int).reshape(-1, 1)
+        # self.trainDataBagOfWords = np.hstack((Y1, self.data.bagOfWords["train"]))
+        # self.testDataBagOfWords = self._testDataAlignment(rep.bagOfWords, rep.bagOfWordsIndexedFeatures)
+        # Y2 = np.ones(self.data.bernoulli["train"].shape[0], dtype=int).reshape(-1, 1)
+        # self.trainDataBernoulli = np.hstack((Y2, self.data.bernoulli["train"]))
+        # self.testDataBernoulli = self._testDataAlignment(rep.bernoulli, rep.bernoulliIndexedFeatures)
+        self.trainDataBagOfWords, self.testDataBagOfWords = self._dataAlignment(self.data.bagOfWords, self.data.bagOfWordsIndexedFeatures)
+        self.trainDataBernoulli, self.testDataBernoulli = self._dataAlignment(self.data.bernoulli, self.data.bernoulliIndexedFeatures)
+        self.lambdaCandidates = [0.02, 0.04, 0.06, 0.08, 0.1, 0.2, 0.4, 0.8]
+        self.iterationsCandidates = [50,150,450,1350]
+        self.learningRatesCandidates = [0.001, 0.01, 0.1, 0.5]
         self.defaultLearningRate = 0.1
-        self.defaultlambda = 0.1
-        self.defaultIterations = 70
+        self.defaultlambda = 0.02
+        self.defaultIterations = 1000
     
-    def _testDataAlignment(self, dataModel, indexedFeatures):
+    def _dataAlignment(self, dataModel, indexedFeatures):
         lookUpdic = {val: key for key, val in indexedFeatures["test"].items()}
-        newMatrix = np.ones(dataModel["test"].shape[0], dtype=int).reshape(-1, 1)
+        newMatrixTrain = np.ones(dataModel["train"].shape[0], dtype=int).reshape(-1, 1)
+        newMatrixTest = np.ones(dataModel["test"].shape[0], dtype=int).reshape(-1, 1)
         for word, index in indexedFeatures["train"].items():
             if word in lookUpdic:
-                newMatrix = np.hstack((newMatrix, dataModel["test"][:, lookUpdic[word]].reshape(-1, 1)))
-        return newMatrix
+                newMatrixTest = np.hstack((newMatrixTest, dataModel["test"][:, lookUpdic[word]].reshape(-1, 1)))
+                newMatrixTrain = np.hstack((newMatrixTrain, dataModel["train"][:, index].reshape(-1, 1)))
+        newMatrixTrain = np.hstack((newMatrixTrain, dataModel["train"][:, -1].reshape(-1, 1)))
+        newMatrixTest = np.hstack((newMatrixTest, dataModel["test"][:, -1].reshape(-1,1)))
+        return newMatrixTrain, newMatrixTest
     def _sigmoid(self, product):
-        return np.exp(product)/(1 + np.exp(product))
+        newArray = np.zeros(len(product), dtype=int)
+        for i in range(len(newArray)):
+            if product[i] < 0:
+                newArray[i] = np.exp(product[i])/(1 + np.exp(product[i]))
+            else:
+                newArray[i] = 1/(1 + np.exp(-product[i]))
+        return newArray
     
-    def train(self, trainData):
+    def _splitTrainAndValidation(self, dataSet):
+        XTrain, XValidation, YTrain, YValidation = train_test_split(dataSet[:, :-1], dataSet[:, -1], test_size=0.3, stratify=dataSet[:, -1], random_state=40)
+        return np.hstack((XTrain, YTrain.reshape(-1, 1))), np.hstack((XValidation, YValidation.reshape(-1, 1)))
+    
+    def gridSearch(self, dataSet):
+        for i in self.lambdaCandidates:
+            for j in self.learningRatesCandidates:
+                trainData, validationData = self._splitTrainAndValidation(dataSet)
+                for k in self.iterationsCandidates:
+                    weights, loss = self.train(i, j, k, trainData)
+                    accuracy, precision, recall, fscore, support = self.validation(weights, validationData)
+                    self._plotting(i, j, k, loss, accuracy, precision, recall, fscore)
+    
+    def _plotting(self, lambdaValue, learningRateValue, iterationValue, loss, accuracy, precision, recall, fscore):
+        XAxis = np.arange(1, iterationValue+1, 1)
+        plt.plot(XAxis, loss, color="g")
+        plt.xlabel("iterations")
+        plt.ylabel("loss")
+        plt.title(f"Loss Curve\nat Lambda {lambdaValue}, Learning rate {learningRateValue} \nAccuracy {int(accuracy*100)}%, Precision {int(precision*100)}\Rrecall {int(recall*100)}, Fscore {int(fscore*100)}")
+        plt.show()
+        
+        
+    
+    def train(self, lambdaValue, learningRateValue, iterationValue, trainData):
         Loss = []
-        weights = np.random.uniform((-0.05, 0.05), trainData.shape[1] - 1)
-        for _ in range(self.defaultIterations):
-            P = self._sigmoid(np.dot(weights, trainData[:, :-1]))
-            weights = weights + self.defaultLearningRate * np.dot(trainData[:, :-1], P) - self.defaultLearningRate * self.defaultlambda * weights
-            Loss.append(np.sum(np.dot(trainData[:, -1], np.dot(weights, trainData[:, :-1])) - np.log(1+np.exp(np.dot(weights, trainData[:, :-1])))) - self.defaultlambda * np.sum(np.square(weights)))
-        return weights, Loss
+        weights = np.random.uniform(-0.05, 0.05, trainData.shape[1] - 1)
+        for _ in range(iterationValue):
+            P = self._sigmoid(np.dot(trainData[:, :-1], weights))
+            weights = weights + learningRateValue * np.dot(trainData[:, :-1].T, P) - learningRateValue * lambdaValue * weights
+            Loss.append(np.sum(np.dot(trainData[:, -1].T, np.dot(trainData[:, :-1], weights)) - np.log(1+np.exp(np.dot(trainData[:, :-1], weights)))) - self.defaultlambda * np.sum(np.square(weights)))
+        return weights, np.array(Loss)
     def validation(self, weights, validationData):
-        predictions = (np.dot(weights, validationData[:, :-1])>0).astype(int)
-        count = 0
-        for i in range(len(predictions)):
-            if predictions[i] == validationData[i,-1]:
-                count += 1
-        print(count/len(predictions))
+        predictions = (np.dot(validationData[:, :-1], weights)>0).astype(int)
+        # count = 0
+        # for i in range(len(predictions)):
+        #     if predictions[i] == validationData[i,-1]:
+        #         count += 1
+        # print(count/len(predictions))
+        accuracy = accuracy_score(validationData[:, -1], predictions)
+        precision, recall, fscore, support = precision_recall_fscore_support(validationData[:, -1], predictions)
+        return accuracy, np.mean(precision), np.mean(recall), np.mean(fscore)
+
         
         
         
@@ -242,10 +286,12 @@ def testFunction():
     dataSet1Rep = modelCreator()
     dataSet1Rep.createRepresentations(dataSet1)
     LR1 = mcapLR(dataSet1Rep)
-    print(LR1.trainDataBagOfWords.shape)
-    print(LR1.testDataBagOfWords.shape)
-    print(LR1.trainDataBernoulli.shape)
-    print(LR1.testDataBernoulli.shape)
+    XTrain, XValidation, YTrain, YValidation = train_test_split(LR1.trainDataBagOfWords[:, :-1], LR1.trainDataBagOfWords[:, -1], test_size=0.3, stratify=LR1.trainDataBagOfWords[:, -1], random_state=40)
+    weights = LR1.train(np.hstack((XTrain, YTrain.reshape(-1, 1))))
+    print(LR1.validation(weights, np.hstack((XValidation, YValidation.reshape(-1, 1)))))
+    XTrain2, XValidation2, YTrain2, YValidation2 = train_test_split(LR1.trainDataBernoulli[:, :-1], LR1.trainDataBernoulli[:, -1], test_size=0.3, stratify=LR1.trainDataBernoulli[:, -1], random_state=40)
+    weights2 = LR1.train(LR1.trainDataBernoulli)
+    print(LR1.validation(weights2, np.hstack((XValidation2, YValidation2.reshape(-1, 1)))))
     # multiNB1 = multiNomialNB(dataSet1Rep)
     # multiNB1.train()
     # multiNB1.test()
