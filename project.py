@@ -185,8 +185,10 @@ class mcapLR:
         # self.trainDataBernoulli = np.hstack((Y2, self.data.bernoulli["train"]))
         # self.testDataBernoulli = self._testDataAlignment(rep.bernoulli, rep.bernoulliIndexedFeatures)
         self.trainDataBagOfWords, self.testDataBagOfWords = self._dataAlignment(self.data.bagOfWords, self.data.bagOfWordsIndexedFeatures)
+        self.bagOfWordParametersTuning = []
         self.trainDataBernoulli, self.testDataBernoulli = self._dataAlignment(self.data.bernoulli, self.data.bernoulliIndexedFeatures)
-        self.lambdaCandidates = [0.02, 0.04, 0.06, 0.08, 0.1, 0.2, 0.4, 0.8]
+        self.bernoulliParametersTuning = []
+        self.lambdaCandidates = [0.02, 0.06, 0.1, 0.2, 0.4]
         self.iterationsCandidates = [50,150,450,1350]
         self.learningRatesCandidates = [0.001, 0.01, 0.1, 0.5]
         self.defaultLearningRate = 0.1
@@ -217,14 +219,19 @@ class mcapLR:
         XTrain, XValidation, YTrain, YValidation = train_test_split(dataSet[:, :-1], dataSet[:, -1], test_size=0.3, stratify=dataSet[:, -1], random_state=40)
         return np.hstack((XTrain, YTrain.reshape(-1, 1))), np.hstack((XValidation, YValidation.reshape(-1, 1)))
     
-    def gridSearch(self, dataSet):
+    def gridSearch(self, dataSet, results):
         for i in self.lambdaCandidates:
+            list1 = []
             for j in self.learningRatesCandidates:
+                list2 = []
                 trainData, validationData = self._splitTrainAndValidation(dataSet)
                 for k in self.iterationsCandidates:
-                    weights, loss = self.train(i, j, k, trainData)
-                    accuracy, precision, recall, fscore, support = self.validation(weights, validationData)
-                    self._plotting(i, j, k, loss, accuracy, precision, recall, fscore)
+                    weights, CLL = self.train(i, j, k, trainData)
+                    accuracy, precision, recall, fscore = self.validation(weights, validationData)
+                    listInner = [CLL, accuracy, precision, recall, fscore]
+                    list2.append(listInner)
+                list1.append(list2)
+            results.append(list1)
     
     def _plotting(self, lambdaValue, learningRateValue, iterationValue, loss, accuracy, precision, recall, fscore):
         XAxis = np.arange(1, iterationValue+1, 1)
@@ -234,16 +241,36 @@ class mcapLR:
         plt.title(f"Loss Curve\nat Lambda {lambdaValue}, Learning rate {learningRateValue} \nAccuracy {int(accuracy*100)}%, Precision {int(precision*100)}\Rrecall {int(recall*100)}, Fscore {int(fscore*100)}")
         plt.show()
         
+    
+    def plotting(self, tuningParameters):
+        tempList = [[] for _ in range(5)]
+        XAxis = []
+        for i in range(len(self.lambdaCandidates)):
+            for j in range(len(self.learningRatesCandidates)):
+                for k in range(len(self.iterationsCandidates)):
+                    XAxis.append(str(i)+str(j)+str(k))
+                    for l in range(5):
+                        tempList[l].append(tuningParameters[i][j][k][l])
+        X = np.arange(len(XAxis))
+        plotLabels = ['CLL', 'Accuracy', 'Precision', 'Recall', 'F-score']
+        fig, axs = plt.subplots(5, 1, sharex=True, figsize=(8, 10))
+        for i, val in enumerate(plotLabels):
+            axs[i].plot(X, tempList[i], color="g", label=val)
+        axs[-1].set_xticks(X)
+        axs[-1].set_xticklabels(XAxis, rotation=45) 
+        plt.tight_layout()
+        plt.show()
         
+                    
     
     def train(self, lambdaValue, learningRateValue, iterationValue, trainData):
-        Loss = []
         weights = np.random.uniform(-0.05, 0.05, trainData.shape[1] - 1)
         for _ in range(iterationValue):
             P = self._sigmoid(np.dot(trainData[:, :-1], weights))
             weights = weights + learningRateValue * np.dot(trainData[:, :-1].T, P) - learningRateValue * lambdaValue * weights
-            Loss.append(np.sum(np.dot(trainData[:, -1].T, np.dot(trainData[:, :-1], weights)) - np.log(1+np.exp(np.dot(trainData[:, :-1], weights)))) - self.defaultlambda * np.sum(np.square(weights)))
-        return weights, np.array(Loss)
+            # Loss.append(np.sum(np.dot(trainData[:, -1].T, np.dot(trainData[:, :-1], weights)) - np.log(1+np.exp(np.dot(trainData[:, :-1], weights)))) - self.defaultlambda * np.sum(np.square(weights)))
+        CLL = np.sum(np.dot(trainData[:, -1].T, np.dot(trainData[:, :-1], weights)) - np.log(1+np.exp(np.dot(trainData[:, :-1], weights)))) - self.defaultlambda * np.sum(np.square(weights))
+        return weights, CLL
     def validation(self, weights, validationData):
         predictions = (np.dot(validationData[:, :-1], weights)>0).astype(int)
         # count = 0
@@ -255,11 +282,6 @@ class mcapLR:
         precision, recall, fscore, support = precision_recall_fscore_support(validationData[:, -1], predictions)
         return accuracy, np.mean(precision), np.mean(recall), np.mean(fscore)
 
-        
-        
-        
-        
-        
 def testFunction():
     def accuracy(dataSet, mOrb):
         count = 0
@@ -286,12 +308,10 @@ def testFunction():
     dataSet1Rep = modelCreator()
     dataSet1Rep.createRepresentations(dataSet1)
     LR1 = mcapLR(dataSet1Rep)
-    XTrain, XValidation, YTrain, YValidation = train_test_split(LR1.trainDataBagOfWords[:, :-1], LR1.trainDataBagOfWords[:, -1], test_size=0.3, stratify=LR1.trainDataBagOfWords[:, -1], random_state=40)
-    weights = LR1.train(np.hstack((XTrain, YTrain.reshape(-1, 1))))
-    print(LR1.validation(weights, np.hstack((XValidation, YValidation.reshape(-1, 1)))))
-    XTrain2, XValidation2, YTrain2, YValidation2 = train_test_split(LR1.trainDataBernoulli[:, :-1], LR1.trainDataBernoulli[:, -1], test_size=0.3, stratify=LR1.trainDataBernoulli[:, -1], random_state=40)
-    weights2 = LR1.train(LR1.trainDataBernoulli)
-    print(LR1.validation(weights2, np.hstack((XValidation2, YValidation2.reshape(-1, 1)))))
+    LR1.gridSearch(LR1.trainDataBagOfWords, LR1.bagOfWordParametersTuning)
+    LR1.gridSearch(LR1.trainDataBernoulli, LR1.bernoulliParametersTuning)
+    LR1.plotting(LR1.bagOfWordParametersTuning)
+    LR1.plotting(LR1.bernoulliParametersTuning)
     # multiNB1 = multiNomialNB(dataSet1Rep)
     # multiNB1.train()
     # multiNB1.test()
