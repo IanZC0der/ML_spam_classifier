@@ -11,6 +11,9 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.metrics import accuracy_score
 import matplotlib.pyplot as plt
+from sklearn.model_selection import GridSearchCV
+from sklearn.linear_model import SGDClassifier
+from sklearn.metrics import make_scorer, accuracy_score, precision_score, recall_score, f1_score, log_loss
 
 class dataExtracter:
     def __init__(self, zipName):
@@ -106,6 +109,7 @@ class multiNomialNB:
         self.condProb = {1:[], 0:[]}
         self.data = rep
         self.predictions = None
+        self.testResults = None
     def train(self):
         classes, counts = np.unique(self.data.bagOfWords["train"][:,-1], return_counts = True)
         for OneClass, count in zip(classes, counts):
@@ -131,6 +135,15 @@ class multiNomialNB:
                     predicted = oneClass
             predictions.append(predicted)
         self.predictions = np.array(predictions)
+        self.testResults = self._calc(self.data.bagOfWords["test"][:, -1], self.predictions)
+
+    def _calc(self, Y, YPred):
+        accuracy = accuracy_score(Y, YPred)
+        precision = precision_score(Y, YPred, zero_division=0.0, average="binary")
+        recall = recall_score(Y, YPred, average="binary")
+        fscore = f1_score(Y, YPred, average="binary")
+        temp = [accuracy, precision, recall, fscore]
+        return [round(_, 3) for _ in temp]
 
 
 class bernoulliNB:
@@ -142,6 +155,7 @@ class bernoulliNB:
         self.switchedKeyValTrain = {val: key for key, val in self.data.bernoulliIndexedFeatures["train"].items()}
         self.switchedKeyValTest = {val:key for key, val in self.data.bernoulliIndexedFeatures["test"].items()}
         self.predictions = None
+        self.testResults = None
     def train(self):
         classes, counts = np.unique(self.data.bernoulli["train"][:,-1], return_counts = True)
         for OneClass, count in zip(classes, counts):
@@ -174,6 +188,15 @@ class bernoulliNB:
                     predicted = oneClass
             predictions.append(predicted)
         self.predictions = np.array(predictions) 
+        self.testResults = self._calc(self.data.bernoulli["test"][:, -1], self.predictions)
+    
+    def _calc(self, Y, YPred):
+        accuracy = accuracy_score(Y, YPred)
+        precision = precision_score(Y, YPred, zero_division=0.0, average="binary")
+        recall = recall_score(Y, YPred, average="binary")
+        fscore = f1_score(Y, YPred, average="binary")
+        temp = [accuracy, precision, recall, fscore]
+        return [round(_, 3) for _ in temp]
 
 class mcapLR:
     def __init__(self, rep, dataSetPrefix):
@@ -219,7 +242,7 @@ class mcapLR:
         return newArray
     
     def _splitTrainAndValidation(self, dataSet):
-        XTrain, XValidation, YTrain, YValidation = train_test_split(dataSet[:, :-1], dataSet[:, -1], test_size=0.3, stratify=dataSet[:, -1], random_state=40)
+        XTrain, XValidation, YTrain, YValidation = train_test_split(dataSet[:, :-1], dataSet[:, -1], test_size=0.3, stratify=dataSet[:, -1], random_state=80)
         return np.hstack((XTrain, YTrain.reshape(-1, 1))), np.hstack((XValidation, YValidation.reshape(-1, 1)))
     
     def gridSearch(self, dataSet, results):
@@ -236,15 +259,6 @@ class mcapLR:
                 list1.append(list2)
             results.append(list1)
     
-    def _plotting(self, lambdaValue, learningRateValue, iterationValue, loss, accuracy, precision, recall, fscore):
-        XAxis = np.arange(1, iterationValue+1, 1)
-        plt.plot(XAxis, loss, color="g")
-        plt.xlabel("iterations")
-        plt.ylabel("loss")
-        plt.title(f"Loss Curve\nat Lambda {lambdaValue}, Learning rate {learningRateValue} \nAccuracy {int(accuracy*100)}%, Precision {int(precision*100)}\Rrecall {int(recall*100)}, Fscore {int(fscore*100)}")
-        plt.show()
-        
-    
     def plotting(self, tuningParameters):
         tempList = [[] for _ in range(5)]
         XAxis = []
@@ -256,7 +270,7 @@ class mcapLR:
                         tempList[l].append(tuningParameters[i][j][k][l])
         X = np.arange(len(XAxis))
         plotLabels = ["CLL", "Accuracy", "Precision", "Recall", "F-score"]
-        fig, axs = plt.subplots(5, 1, sharex=True, figsize=(10, 14))
+        fig, axs = plt.subplots(5, 1, sharex=True, figsize=(14, 12))
         for i, val in enumerate(plotLabels):
             axs[i].plot(X, tempList[i], color="g", label=val)
             axs[i].set_ylabel(plotLabels[i])
@@ -264,46 +278,87 @@ class mcapLR:
         axs[-1].set_xticklabels(XAxis, rotation=90) 
         
         plt.tight_layout()
-        plt.savefig(f"./{self._dataSetPrefix}+{self._plotNames[self._counter]}")
+        plt.savefig(f"./{self._dataSetPrefix}_{self._plotNames[self._counter]}")
         self._counter += 1
         plt.close()
         
-                    
-    
     def train(self, lambdaValue, learningRateValue, iterationValue, trainData):
         weights = np.random.uniform(-0.05, 0.05, trainData.shape[1] - 1)
         for _ in range(iterationValue):
             P = self._sigmoid(np.dot(trainData[:, :-1], weights))
             weights = weights + learningRateValue * np.dot(trainData[:, :-1].T, P) - learningRateValue * lambdaValue * weights
-            # Loss.append(np.sum(np.dot(trainData[:, -1].T, np.dot(trainData[:, :-1], weights)) - np.log(1+np.exp(np.dot(trainData[:, :-1], weights)))) - self.defaultlambda * np.sum(np.square(weights)))
-        CLL = np.sum(np.dot(trainData[:, -1].T, np.dot(trainData[:, :-1], weights)) - np.log(1+np.exp(np.dot(trainData[:, :-1], weights)))) - self.defaultlambda * np.sum(np.square(weights))
+        CLL = np.sum(np.dot(trainData[:, -1].T, np.dot(trainData[:, :-1], weights)) - np.log(1+np.exp(np.dot(trainData[:, :-1], weights)))) - lambdaValue * np.sum(np.square(weights))
         return weights, CLL
+    def trainUsingTunedParams(self, lambdaValue, learningRateValue, iterationValue, trainData, testData):
+        weights, CLL = self.train(lambdaValue, learningRateValue, iterationValue, trainData)
+        return self.validation(weights, testData)
+        
     def validation(self, weights, validationData):
         predictions = (np.dot(validationData[:, :-1], weights)>0).astype(int)
-        # count = 0
-        # for i in range(len(predictions)):
-        #     if predictions[i] == validationData[i,-1]:
-        #         count += 1
-        # print(count/len(predictions))
         accuracy = accuracy_score(validationData[:, -1], predictions)
         precision, recall, fscore, support = precision_recall_fscore_support(validationData[:, -1], predictions, average="binary")
-        return accuracy, precision, recall, fscore
+        temp = [accuracy, precision, recall, fscore]
+        return [round(_, 3) for _ in temp]
 
-def testFunction():
-    def accuracy(dataSet, mOrb):
-        count = 0
-        if mOrb == "m":
-            for i in range(len(dataSet.predictions)):
-                if dataSet.predictions[i] == dataSet.data.bagOfWords["test"][i,-1]:
-                    count += 1
+class SGDSklearn:
+    def __init__(self, mcapModel):
+        self.paramGrid = {
+            "alpha": [0.02, 0.06, 0.1, 0.2, 0.4],
+            "max_iter": [50, 1350, 450, 1350]
+        }
+        self.bestParams = None
+        self.trainDataBagOfWords, self.testDataBagOfWords = mcapModel.trainDataBagOfWords, mcapModel.testDataBagOfWords
+        self.trainDataBernoulli, self.testDataBernoulli = mcapModel.trainDataBernoulli, mcapModel.testDataBernoulli
+        self.scoring = {
+            'accuracy': make_scorer(accuracy_score),
+            'precision': make_scorer(precision_score, zero_division=0.0, average="binary"),
+            'recall': make_scorer(recall_score, average="binary"),
+            'f1_score': make_scorer(f1_score, average="binary"),
+            'log_loss': make_scorer(log_loss, greater_is_better=False)
+        }
+        self.bagOfWordsBestClassifer = None
+        self.bernoulliBestClassifier = None
+        self._counter = 0
+        self.defaultlambda = 0.02
+        self.defaultIterations = 50
+        self.bagOfWordsResults = []
+        self.bernoulliResults = []
+        self.bagOfWordsGridSearch = []
+        self.bernoulliGridSearch = []
+    
+    def _splitTrainAndValidation(self, dataSet):
+        XTrain, XValidation, YTrain, YValidation = train_test_split(dataSet[:, :-1], dataSet[:, -1], test_size=0.3, stratify=dataSet[:, -1], random_state=80)
+        return np.hstack((XTrain, YTrain.reshape(-1, 1))), np.hstack((XValidation, YValidation.reshape(-1, 1)))
+    def search(self, trainData, testData):
+        sgdClassifier = SGDClassifier(loss="log_loss", learning_rate="constant", eta0=0.01, random_state=80)
+        gridSearch = GridSearchCV(sgdClassifier, self.paramGrid, scoring=self.scoring, refit="log_loss", n_jobs=-1)
+        Train, Validation = self._splitTrainAndValidation(trainData)
+        gridSearch.fit(Train[:, :-1], Train[:, -1])
+        self.bestParams = gridSearch.best_params_
+        if self._counter == 0:
+            self.bagOfWordsBestClassifer = gridSearch.best_estimator_
+            self.bagOfWordsResults = self._calc(testData[:, -1], self.bagOfWordsBestClassifer.predict(testData[:, :-1]))
+            self.bagOfWordsGridSearch = self._calc(Validation[:,-1], gridSearch.best_estimator_.predict(Validation[:, :-1]))
         else:
-            for i in range(len(dataSet.predictions)):
-                if dataSet.predictions[i] == dataSet.data.bernoulli["test"][i,-1]:
-                    count += 1
-            
-        print(count/len(dataSet.predictions))
-    extracted = dataExtracter("project1_datasets")
-    extracted.readData()
+            self.bernoulliBestClassifier = gridSearch.best_estimator_
+            self.bernoulliResults = self._calc(testData[:, -1], self.bernoulliBestClassifier.predict(testData[:, :-1]))
+            self.bernoulliGridSearch = self._calc(Validation[:,-1], gridSearch.best_estimator_.predict(Validation[:, :-1]))
+        self._counter += 1
+    def _calc(self, Y, YPred):
+        accuracy = accuracy_score(Y, YPred)
+        precision = precision_score(Y, YPred, zero_division=0.0, average="binary")
+        recall = recall_score(Y, YPred, average="binary")
+        fscore = f1_score(Y, YPred, average="binary")
+        temp = [accuracy, precision, recall, fscore]
+        return [round(_, 3) for _ in temp]
+
+        
+        
+        
+        
+
+
+def deleteFiles():
     allZipFiles = glob.glob(os.path.join("./", "enron*")) + glob.glob(os.path.join("./", "*sets"))
     # folder = glob.glob(os.path.join("./", "project1*"))
     for aFile in allZipFiles:
@@ -311,24 +366,40 @@ def testFunction():
             os.rmdir(aFile)
         else:
             os.remove(aFile)
-    dataSet1 = extracted.allData["enron1"]
-    dataSet1Rep = modelCreator()
-    dataSet1Rep.createRepresentations(dataSet1)
-    LR1 = mcapLR(dataSet1Rep, "enron1")
-    LR1.gridSearch(LR1.trainDataBagOfWords, LR1.bagOfWordParametersTuning)
-    LR1.gridSearch(LR1.trainDataBernoulli, LR1.bernoulliParametersTuning)
-    LR1.plotting(LR1.bagOfWordParametersTuning)
-    LR1.plotting(LR1.bernoulliParametersTuning)
-    # multiNB1 = multiNomialNB(dataSet1Rep)
-    # multiNB1.train()
-    # multiNB1.test()
-    # berNB1 = bernoulliNB(dataSet1Rep)
-    # berNB1.train()
-    # berNB1.test()
-    # accuracy(multiNB1, "m")
-    # accuracy(berNB1, "b")
-    # test the MCAP LR
-
-
     
-testFunction()
+def main():
+    extracted = dataExtracter("project1_datasets")
+    extracted.readData()
+    deleteFiles()
+    for dataSetPrefix in ["enron1", "enron2", "enron4"]:
+        print(f"For the dataSet with the prefix {dataSetPrefix}:")
+        dataSet = extracted.allData[dataSetPrefix]
+        dataSetRep = modelCreator()
+        dataSetRep.createRepresentations(dataSet)
+        multiNB = multiNomialNB(dataSetRep)
+        multiNB.train()
+        multiNB.test()
+        print(f"multinomial NB results: {multiNB.testResults}")
+        
+        berNB = bernoulliNB(dataSetRep)
+        berNB.train()
+        berNB.test()
+        print(f"Bernoulli NB results: {berNB.testResults}")
+
+        LR = mcapLR(dataSet1Rep, dataSetPrefix)
+        LR.gridSearch(LR.trainDataBagOfWords, LR.bagOfWordParametersTuning)
+        LR.gridSearch(LR.trainDataBernoulli, LR.bernoulliParametersTuning)
+        LR.plotting(LR.bagOfWordParametersTuning)
+        LR.plotting(LR.bernoulliParametersTuning)
+        SGD = SGDSklearn(LR)
+        SGD.search(SGD.trainDataBagOfWords, SGD.testDataBagOfWords)
+        print("Results using SGD classifier for the bag of words representation:")
+        print(f"train result:{SGD.bagOfWordsGridSearch}")
+        print(f"test: {SGD.bagOfWordsResults}")
+        print(f"best params: {SGD.bestParams}")
+        SGD.search(SGD.trainDataBernoulli, SGD.testDataBernoulli)
+        print("Results using SGD classifier for the Bernoulli representation:")
+        print(f"train result:{SGD.bernoulliGridSearch}")
+        print(f"test: {SGD.bernoulliResults}")
+        print(f"best params: {SGD.bestParams}")
+
