@@ -441,8 +441,8 @@ def main():
     extracted.readData()
     deleteFiles()
     filePath = "./results.txt"
-    parametersMap = {"enron1": {"BW": [0.06, 0.5, 450], "BNL": [0.02, 0.5, 150]}, "enron2": {"BW": [
-        0.1, 0.5, 450], "BNL": [0.4, 0.01, 450]}, "enron4": {"BW": [0.2, 0.001, 150], "BNL": [0.2, 0.5, 50]}}
+    parametersMap = {"enron1": {"BW": [0.02, 0.5, 50], "BNL": [0.02, 0.5, 50]}, "enron2": {"BW": [
+        0.02, 0.5, 50], "BNL": [0.02, 0.5, 50]}, "enron4": {"BW": [0.02, 0.5, 50], "BNL": [0.02, 0.5, 50]}}
     with open(filePath, "w") as file:
         sys.stdout = file
         print("Note: The elements in the result list are in the order of accuracy, precision, recall and fscore.")
