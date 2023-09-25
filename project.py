@@ -3,7 +3,7 @@ import sys
 import os
 import io
 import glob
-import numpy as np 
+import numpy as np
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 import shutil
@@ -16,6 +16,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import make_scorer, accuracy_score, precision_score, recall_score, f1_score, log_loss
 
+
 class dataExtracter:
     def __init__(self, zipName):
         self.allData = {"enron1": {"train": {"spam": [], "ham": []}, "test": {"spam": [], "ham": []}},
@@ -25,46 +26,58 @@ class dataExtracter:
         self.zipPath = os.path.join("./", self.folderName+".zip")
         self._extractFile()
         self._moveZipToRoot()
+
     def _extractFile(self):
         with zipfile.ZipFile(self.zipPath, "r") as folder:
             folder.extractall("./")
+
     def _moveZipToRoot(self):
-        for fileName in os.listdir(os.path.join("./",self.folderName)):
-            shutil.move(os.path.join("./" + self.folderName, fileName), os.path.join("./", fileName))
+        for fileName in os.listdir(os.path.join("./", self.folderName)):
+            shutil.move(os.path.join("./" + self.folderName,
+                        fileName), os.path.join("./", fileName))
+
     def readData(self):
         for dataSetName in ["enron1", "enron2", "enron4"]:
             for trainOrTest in ["train", "test"]:
                 with zipfile.ZipFile(os.path.join("./", dataSetName.lower()+"_"+trainOrTest.lower()+".zip"), "r") as zipRef:
                     for spamOrHam in ["spam", "ham"]:
-                        files = [f for f in zipRef.namelist() if f.endswith(spamOrHam.lower()+".txt")]
+                        files = [f for f in zipRef.namelist() if f.endswith(
+                            spamOrHam.lower()+".txt")]
                         for file in files:
-                            self.allData[dataSetName][trainOrTest][spamOrHam.lower()].append(io.TextIOWrapper(zipRef.open(file), encoding='iso-8859-1', newline='').read())
+                            self.allData[dataSetName][trainOrTest][spamOrHam.lower()].append(
+                                io.TextIOWrapper(zipRef.open(file), encoding='iso-8859-1', newline='').read())
+
 
 class modelCreator:
     def __init__(self):
-        # create the bag of word representation. 
-        self.bagOfWords = {"train": None, "test":None}
+        # create the bag of word representation.
+        self.bagOfWords = {"train": None, "test": None}
         self.bagOfWordsFeatures = {"train": None, "test": None}
-        self.bagOfWordsIndexedFeatures = {"train": None, "test":None}
+        self.bagOfWordsIndexedFeatures = {"train": None, "test": None}
         # create the bernoulli representation
-        self.bernoulli = {"train":None, "test":None}
-        self.bernoulliFeatures = {"train":None, "test":None}
-        self.bernoulliIndexedFeatures = {"train": None, "test":None}
+        self.bernoulli = {"train": None, "test": None}
+        self.bernoulliFeatures = {"train": None, "test": None}
+        self.bernoulliIndexedFeatures = {"train": None, "test": None}
+
     def _createVocab(self, rawFeatures, trainOrTest):
         # create the indexed words. Notice that in the train dictionary, the key is the word and value is the index but in the dictionary for test data, it's the opposite. This is for the convenience of lookup
         if trainOrTest == "train":
-            newDic = {word:i for i, word in enumerate(rawFeatures[trainOrTest])}
+            newDic = {word: i for i, word in enumerate(
+                rawFeatures[trainOrTest])}
             return newDic
         if trainOrTest == "test":
-            newDic = {i:word for i, word in enumerate(rawFeatures[trainOrTest])}
+            newDic = {i: word for i, word in enumerate(
+                rawFeatures[trainOrTest])}
             return newDic
-    def _tokenizeText(self,text):
+
+    def _tokenizeText(self, text):
         # tokenize the email
         tokens = word_tokenize(text)
         tokens = [word.lower() for word in tokens if word.isalnum()]
         stopWords = set(stopwords.words('english'))
         tokens = [word for word in tokens if word not in stopWords]
         return tokens
+
     def _processData(self, rawText):
         # create a column of y values. For spam emails their values are 1.
         YSpam = np.ones(len(rawText["spam"]), dtype=int)
@@ -73,24 +86,35 @@ class modelCreator:
         tokenizedData = [self._tokenizeText(email) for email in catList]
         Y = np.concatenate((YSpam, YHam))
         return [tokenizedData, Y]
+
     def _bagOfWords(self, tokenizedData, Y, trainOrTest):
         # create the bag of words representation
         vectorizer = CountVectorizer()
-        X = vectorizer.fit_transform([' '.join(email) for email in tokenizedData])
+        X = vectorizer.fit_transform([' '.join(email)
+                                     for email in tokenizedData])
         X_dense = X.toarray()
         Y_reshaped = Y.reshape(-1, 1)
-        self.bagOfWords[trainOrTest] = np.concatenate((X_dense, Y_reshaped), axis=1)
-        self.bagOfWordsFeatures[trainOrTest] = vectorizer.get_feature_names_out()
-        self.bagOfWordsIndexedFeatures[trainOrTest] = self._createVocab(self.bagOfWordsFeatures, trainOrTest)
+        self.bagOfWords[trainOrTest] = np.concatenate(
+            (X_dense, Y_reshaped), axis=1)
+        self.bagOfWordsFeatures[trainOrTest] = vectorizer.get_feature_names_out(
+        )
+        self.bagOfWordsIndexedFeatures[trainOrTest] = self._createVocab(
+            self.bagOfWordsFeatures, trainOrTest)
+
     def _bernoulli(self, tokenizedData, Y, trainOrTest):
         # create the bernoulli representation
         vectorizer = CountVectorizer(binary=True)
-        X = vectorizer.fit_transform([' '.join(email) for email in tokenizedData])
+        X = vectorizer.fit_transform([' '.join(email)
+                                     for email in tokenizedData])
         X_dense = X.toarray()
         Y_reshaped = Y.reshape(-1, 1)
-        self.bernoulli[trainOrTest] = np.concatenate((X_dense, Y_reshaped), axis=1)
-        self.bernoulliFeatures[trainOrTest] = vectorizer.get_feature_names_out()
-        self.bernoulliIndexedFeatures[trainOrTest] = self._createVocab(self.bernoulliFeatures, trainOrTest)
+        self.bernoulli[trainOrTest] = np.concatenate(
+            (X_dense, Y_reshaped), axis=1)
+        self.bernoulliFeatures[trainOrTest] = vectorizer.get_feature_names_out(
+        )
+        self.bernoulliIndexedFeatures[trainOrTest] = self._createVocab(
+            self.bernoulliFeatures, trainOrTest)
+
     def createRepresentations(self, rawText):
         # invoke the methods for creating the representations
         tokenizedData = None
@@ -99,27 +123,32 @@ class modelCreator:
             [tokenizedData, Y] = self._processData(rawText[trainOrTest])
             self._bagOfWords(tokenizedData, Y, trainOrTest)
             self._bernoulli(tokenizedData, Y, trainOrTest)
-        
 
 
 # multinomial NB model with add-one smoothing
 class multiNomialNB:
     def __init__(self, rep):
-        self.priorsProb = {1:None, 0:None}
-        self.priorCounts = {1:None, 0:None}
-        self.condProb = {1:[], 0:[]}
+        self.priorsProb = {1: None, 0: None}
+        self.priorCounts = {1: None, 0: None}
+        self.condProb = {1: [], 0: []}
         self.data = rep
         self.predictions = None
         self.testResults = None
+
     def train(self):
-        classes, counts = np.unique(self.data.bagOfWords["train"][:,-1], return_counts = True)
+        classes, counts = np.unique(
+            self.data.bagOfWords["train"][:, -1], return_counts=True)
         for OneClass, count in zip(classes, counts):
             self.priorCounts[OneClass] = count
-            self.priorsProb[OneClass] = np.log(count/len(self.data.bagOfWords["train"][:,-1]))
+            self.priorsProb[OneClass] = np.log(
+                count/len(self.data.bagOfWords["train"][:, -1]))
         lengthOfVoca = len(self.data.bagOfWordsFeatures["train"])
         for i in range(lengthOfVoca):
-            self.condProb[1].append((np.sum(self.data.bagOfWords["train"][:self.priorCounts[1], i]) + 1) /np.sum(self.data.bagOfWords["train"][:self.priorCounts[1], :-1]))
-            self.condProb[0].append((np.sum(self.data.bagOfWords["train"][self.priorCounts[1]:, i]) + 1) /np.sum(self.data.bagOfWords["train"][self.priorCounts[1]:, :-1]))
+            self.condProb[1].append((np.sum(self.data.bagOfWords["train"][:self.priorCounts[1], i]) +
+                                    1) / np.sum(self.data.bagOfWords["train"][:self.priorCounts[1], :-1]))
+            self.condProb[0].append((np.sum(self.data.bagOfWords["train"][self.priorCounts[1]:, i]) +
+                                    1) / np.sum(self.data.bagOfWords["train"][self.priorCounts[1]:, :-1]))
+
     def test(self):
         predictions = []
         # ignore the unseen words in the test data
@@ -129,50 +158,57 @@ class multiNomialNB:
             for oneClass, prior in self.priorsProb.items():
                 prob = prior
                 for j in range(self.data.bagOfWords["test"].shape[1] - 1):
-                    if self.data.bagOfWords["test"][i,j] != 0 and self.data.bagOfWordsIndexedFeatures["test"][j] in self.data.bagOfWordsIndexedFeatures["train"]:
-                        prob += np.log(self.condProb[oneClass][self.data.bagOfWordsIndexedFeatures["train"][self.data.bagOfWordsIndexedFeatures["test"][j]]])
+                    if self.data.bagOfWords["test"][i, j] != 0 and self.data.bagOfWordsIndexedFeatures["test"][j] in self.data.bagOfWordsIndexedFeatures["train"]:
+                        prob += np.log(self.condProb[oneClass][self.data.bagOfWordsIndexedFeatures["train"]
+                                       [self.data.bagOfWordsIndexedFeatures["test"][j]]])
                 if prob > maxProb:
                     maxProb = prob
                     predicted = oneClass
             predictions.append(predicted)
         self.predictions = np.array(predictions)
-        self.testResults = self._calc(self.data.bagOfWords["test"][:, -1], self.predictions)
+        self.testResults = self._calc(
+            self.data.bagOfWords["test"][:, -1], self.predictions)
 
     def _calc(self, Y, YPred):
         accuracy = accuracy_score(Y, YPred)
-        precision = precision_score(Y, YPred, zero_division=0.0, average="binary")
+        precision = precision_score(
+            Y, YPred, zero_division=0.0, average="binary")
         recall = recall_score(Y, YPred, average="binary")
-        fscore = f1_score(Y, YPred, average="binary")
+        fscore = f1_score(Y, YPred, zero_division=0.0, average="binary")
         temp = [accuracy, precision, recall, fscore]
         return [round(_, 3) for _ in temp]
 
 
 class bernoulliNB:
-    def __init__(self,rep):
-        self.priorsProb = {1:None, 0:None}
-        self.priorCounts = {1:None, 0:None}
-        self.condProb = {1:[], 0:[]}
+    def __init__(self, rep):
+        self.priorsProb = {1: None, 0: None}
+        self.priorCounts = {1: None, 0: None}
+        self.condProb = {1: [], 0: []}
         self.data = rep
-        self.switchedKeyValTrain = {val: key for key, val in self.data.bernoulliIndexedFeatures["train"].items()}
-        self.switchedKeyValTest = {val:key for key, val in self.data.bernoulliIndexedFeatures["test"].items()}
+        self.switchedKeyValTrain = {
+            val: key for key, val in self.data.bernoulliIndexedFeatures["train"].items()}
+        self.switchedKeyValTest = {
+            val: key for key, val in self.data.bernoulliIndexedFeatures["test"].items()}
         self.predictions = None
         self.testResults = None
+
     def train(self):
-        classes, counts = np.unique(self.data.bernoulli["train"][:,-1], return_counts = True)
+        classes, counts = np.unique(
+            self.data.bernoulli["train"][:, -1], return_counts=True)
         for OneClass, count in zip(classes, counts):
             self.priorCounts[OneClass] = count
-            self.priorsProb[OneClass] = np.log(count/len(self.data.bernoulli["train"][:,-1]))
+            self.priorsProb[OneClass] = np.log(
+                count/len(self.data.bernoulli["train"][:, -1]))
         lengthOfVoca = len(self.data.bernoulliFeatures["train"])
         for i in range(lengthOfVoca):
-            self.condProb[1].append((np.sum(self.data.bernoulli["train"][:self.priorCounts[1], i]) + 1) / (self.priorCounts[1] + 2))
-            self.condProb[0].append((np.sum(self.data.bernoulli["train"][self.priorCounts[1]:, i]) + 1) / (self.priorCounts[0] + 2))
-    
+            self.condProb[1].append((np.sum(
+                self.data.bernoulli["train"][:self.priorCounts[1], i]) + 1) / (self.priorCounts[1] + 2))
+            self.condProb[0].append((np.sum(
+                self.data.bernoulli["train"][self.priorCounts[1]:, i]) + 1) / (self.priorCounts[0] + 2))
+
     def test(self):
         predictions = []
         # ignore the unseen words in the test data
-        # priors = {1: self.priorsProb[1], 0: self.priorsProb[0]}
-        # for i, word in self.rep.bagOfWordsIndexedFeatures["test"].items():
-        #     if word in self.rep.bagOfWordsIndexedFeatures["train"]:
         for i in range(self.data.bernoulli["test"].shape[0]):
             maxProb = -np.inf
             predicted = None
@@ -180,7 +216,7 @@ class bernoulliNB:
                 prob = prior
                 for j, word in self.switchedKeyValTrain.items():
                     if word in self.switchedKeyValTest:
-                        if self.data.bernoulli["test"][i,self.switchedKeyValTest[word]]:
+                        if self.data.bernoulli["test"][i, self.switchedKeyValTest[word]]:
                             prob += np.log(self.condProb[oneClass][j])
                     else:
                         prob += np.log(1-self.condProb[oneClass][j])
@@ -188,51 +224,58 @@ class bernoulliNB:
                     maxProb = prob
                     predicted = oneClass
             predictions.append(predicted)
-        self.predictions = np.array(predictions) 
-        self.testResults = self._calc(self.data.bernoulli["test"][:, -1], self.predictions)
-    
+        self.predictions = np.array(predictions)
+        self.testResults = self._calc(
+            self.data.bernoulli["test"][:, -1], self.predictions)
+
     def _calc(self, Y, YPred):
         accuracy = accuracy_score(Y, YPred)
-        precision = precision_score(Y, YPred, zero_division=0.0, average="binary")
+        precision = precision_score(
+            Y, YPred, zero_division=0.0, average="binary")
         recall = recall_score(Y, YPred, average="binary")
-        fscore = f1_score(Y, YPred, average="binary")
+        fscore = f1_score(Y, YPred, zero_division=0.0, average="binary")
         temp = [accuracy, precision, recall, fscore]
         return [round(_, 3) for _ in temp]
+
 
 class mcapLR:
     def __init__(self, rep, dataSetPrefix):
         self.data = rep
-        # Y1 = np.ones(self.data.bagOfWords["train"].shape[0], dtype=int).reshape(-1, 1)
-        # self.trainDataBagOfWords = np.hstack((Y1, self.data.bagOfWords["train"]))
-        # self.testDataBagOfWords = self._testDataAlignment(rep.bagOfWords, rep.bagOfWordsIndexedFeatures)
-        # Y2 = np.ones(self.data.bernoulli["train"].shape[0], dtype=int).reshape(-1, 1)
-        # self.trainDataBernoulli = np.hstack((Y2, self.data.bernoulli["train"]))
-        # self.testDataBernoulli = self._testDataAlignment(rep.bernoulli, rep.bernoulliIndexedFeatures)
-        self.trainDataBagOfWords, self.testDataBagOfWords = self._dataAlignment(self.data.bagOfWords, self.data.bagOfWordsIndexedFeatures)
+        self.trainDataBagOfWords, self.testDataBagOfWords = self._dataAlignment(
+            self.data.bagOfWords, self.data.bagOfWordsIndexedFeatures)
         self.bagOfWordParametersTuning = []
-        self.trainDataBernoulli, self.testDataBernoulli = self._dataAlignment(self.data.bernoulli, self.data.bernoulliIndexedFeatures)
+        self.trainDataBernoulli, self.testDataBernoulli = self._dataAlignment(
+            self.data.bernoulli, self.data.bernoulliIndexedFeatures)
         self.bernoulliParametersTuning = []
         self.lambdaCandidates = [0.02, 0.06, 0.1, 0.2, 0.4]
-        self.iterationsCandidates = [50,150,450,1350]
+        self.iterationsCandidates = [50, 150, 450, 1350]
         self.learningRatesCandidates = [0.001, 0.01, 0.1, 0.5]
         self.defaultLearningRate = 0.1
         self.defaultlambda = 0.02
         self.defaultIterations = 1000
         self._counter = 0
-        self._plotNames = ["BagOfWords_ParametersTuning.png", "Bernoulli_ParametersTuning.png"]
+        self._plotNames = ["BagOfWords_ParametersTuning.png",
+                           "Bernoulli_ParametersTuning.png"]
         self._dataSetPrefix = dataSetPrefix
-    
+
     def _dataAlignment(self, dataModel, indexedFeatures):
         lookUpdic = {val: key for key, val in indexedFeatures["test"].items()}
-        newMatrixTrain = np.ones(dataModel["train"].shape[0], dtype=int).reshape(-1, 1)
-        newMatrixTest = np.ones(dataModel["test"].shape[0], dtype=int).reshape(-1, 1)
+        newMatrixTrain = np.ones(
+            dataModel["train"].shape[0], dtype=int).reshape(-1, 1)
+        newMatrixTest = np.ones(
+            dataModel["test"].shape[0], dtype=int).reshape(-1, 1)
         for word, index in indexedFeatures["train"].items():
             if word in lookUpdic:
-                newMatrixTest = np.hstack((newMatrixTest, dataModel["test"][:, lookUpdic[word]].reshape(-1, 1)))
-                newMatrixTrain = np.hstack((newMatrixTrain, dataModel["train"][:, index].reshape(-1, 1)))
-        newMatrixTrain = np.hstack((newMatrixTrain, dataModel["train"][:, -1].reshape(-1, 1)))
-        newMatrixTest = np.hstack((newMatrixTest, dataModel["test"][:, -1].reshape(-1,1)))
+                newMatrixTest = np.hstack(
+                    (newMatrixTest, dataModel["test"][:, lookUpdic[word]].reshape(-1, 1)))
+                newMatrixTrain = np.hstack(
+                    (newMatrixTrain, dataModel["train"][:, index].reshape(-1, 1)))
+        newMatrixTrain = np.hstack(
+            (newMatrixTrain, dataModel["train"][:, -1].reshape(-1, 1)))
+        newMatrixTest = np.hstack(
+            (newMatrixTest, dataModel["test"][:, -1].reshape(-1, 1)))
         return newMatrixTrain, newMatrixTest
+
     def _sigmoid(self, product):
         newArray = np.zeros(len(product), dtype=int)
         for i in range(len(newArray)):
@@ -241,65 +284,84 @@ class mcapLR:
             else:
                 newArray[i] = 1/(1 + np.exp(-product[i]))
         return newArray
-    
+
     def _splitTrainAndValidation(self, dataSet):
-        XTrain, XValidation, YTrain, YValidation = train_test_split(dataSet[:, :-1], dataSet[:, -1], test_size=0.3, stratify=dataSet[:, -1], random_state=80)
+        XTrain, XValidation, YTrain, YValidation = train_test_split(
+            dataSet[:, :-1], dataSet[:, -1], test_size=0.3, stratify=dataSet[:, -1], random_state=80)
         return np.hstack((XTrain, YTrain.reshape(-1, 1))), np.hstack((XValidation, YValidation.reshape(-1, 1)))
-    
+
     def gridSearch(self, dataSet, results):
         for i in self.lambdaCandidates:
             list1 = []
             for j in self.learningRatesCandidates:
                 list2 = []
-                trainData, validationData = self._splitTrainAndValidation(dataSet)
+                trainData, validationData = self._splitTrainAndValidation(
+                    dataSet)
                 for k in self.iterationsCandidates:
-                    weights, CLL = self.train(i, j, k, trainData)
-                    accuracy, precision, recall, fscore = self.validation(weights, validationData)
-                    listInner = [CLL, accuracy, precision, recall, fscore]
+                    weights = self.train(i, j, k, trainData)
+                    accuracy, precision, recall, fscore = self.validation(
+                        weights, validationData)
+                    listInner = [accuracy, precision, recall, fscore]
                     list2.append(listInner)
                 list1.append(list2)
             results.append(list1)
-    
+
     def plotting(self, tuningParameters):
-        tempList = [[] for _ in range(5)]
+        tempList = [[] for _ in range(4)]
         XAxis = []
         for i in range(len(self.lambdaCandidates)):
             for j in range(len(self.learningRatesCandidates)):
                 for k in range(len(self.iterationsCandidates)):
                     XAxis.append(str(i)+str(j)+str(k))
-                    for l in range(5):
+                    for l in range(4):
                         tempList[l].append(tuningParameters[i][j][k][l])
         X = np.arange(len(XAxis))
-        plotLabels = ["CLL", "Accuracy", "Precision", "Recall", "F-score"]
-        fig, axs = plt.subplots(5, 1, sharex=True, figsize=(14, 12))
+        plotLabels = ["Accuracy", "Precision", "Recall", "F-score"]
+        fig, axs = plt.subplots(4, 1, sharex=True, figsize=(14, 12))
         for i, val in enumerate(plotLabels):
             axs[i].plot(X, tempList[i], color="g", label=val)
             axs[i].set_ylabel(plotLabels[i])
         axs[-1].set_xticks(X)
-        axs[-1].set_xticklabels(XAxis, rotation=90) 
-        
+        axs[-1].set_xticklabels(XAxis, rotation=90)
+
         plt.tight_layout()
-        plt.savefig(f"./{self._dataSetPrefix}_{self._plotNames[self._counter]}")
+        plt.savefig(
+            f"./{self._dataSetPrefix}_{self._plotNames[self._counter]}")
         self._counter += 1
         plt.close()
-        
+
     def train(self, lambdaValue, learningRateValue, iterationValue, trainData):
         weights = np.random.uniform(-0.05, 0.05, trainData.shape[1] - 1)
         for _ in range(iterationValue):
-            P = self._sigmoid(np.dot(trainData[:, :-1], weights))
-            weights = weights + learningRateValue * np.dot(trainData[:, :-1].T, P) - learningRateValue * lambdaValue * weights
-        CLL = np.sum(np.dot(trainData[:, -1].T, np.dot(trainData[:, :-1], weights)) - np.log(1+np.exp(np.dot(trainData[:, :-1], weights)))) - lambdaValue * np.sum(np.square(weights))
-        return weights, CLL
+            P = trainData[:, -1] - \
+                self._sigmoid(np.dot(trainData[:, :-1], weights))
+            weights = weights + learningRateValue * \
+                np.dot(trainData[:, :-1].T, P) - \
+                learningRateValue * lambdaValue * weights
+        # CLL = np.sum(np.dot(trainData[:, -1].T, np.dot(trainData[:, :-1], weights)) - np.log(1+np.exp(np.dot(trainData[:, :-1], weights)))) - lambdaValue * np.sum(np.square(weights))
+        return weights
+
     def trainUsingTunedParams(self, lambdaValue, learningRateValue, iterationValue, trainData, testData):
-        weights, CLL = self.train(lambdaValue, learningRateValue, iterationValue, trainData)
+        weights = self.train(lambdaValue, learningRateValue,
+                             iterationValue, trainData)
         return self.validation(weights, testData)
-        
+
     def validation(self, weights, validationData):
-        predictions = (np.dot(validationData[:, :-1], weights)>0).astype(int)
+        predictions = (np.dot(validationData[:, :-1], weights) > 0).astype(int)
         accuracy = accuracy_score(validationData[:, -1], predictions)
-        precision, recall, fscore, support = precision_recall_fscore_support(validationData[:, -1], predictions, average="binary")
+
+        precision = precision_score(
+            validationData[:, -1], predictions, zero_division=0.0, average="binary")
+        recall = recall_score(
+            validationData[:, -1], predictions, average="binary")
+        fscore = f1_score(
+            validationData[:, -1], predictions, zero_division=0.0, average="binary")
         temp = [accuracy, precision, recall, fscore]
         return [round(_, 3) for _ in temp]
+        # precision, recall, fscore, support = precision_recall_fscore_support(validationData[:, -1], predictions, average="binary")
+        # temp = [accuracy, precision, recall, fscore]
+        # return [round(_, 3) for _ in temp]
+
 
 class SGDSklearn:
     def __init__(self, mcapModel):
@@ -311,11 +373,10 @@ class SGDSklearn:
         self.trainDataBagOfWords, self.testDataBagOfWords = mcapModel.trainDataBagOfWords, mcapModel.testDataBagOfWords
         self.trainDataBernoulli, self.testDataBernoulli = mcapModel.trainDataBernoulli, mcapModel.testDataBernoulli
         self.scoring = {
-            'f1_score': make_scorer(f1_score, average="binary"),
+            'f1_score': make_scorer(f1_score, zero_division=0.0, average="binary"),
             'accuracy': make_scorer(accuracy_score),
             'precision': make_scorer(precision_score, zero_division=0.0, average="binary"),
-            'recall': make_scorer(recall_score, average="binary"),
-            'log_loss': make_scorer(log_loss, greater_is_better=False)
+            'recall': make_scorer(recall_score, average="binary")
         }
         self.bagOfWordsBestClassifer = None
         self.bernoulliBestClassifier = None
@@ -326,41 +387,47 @@ class SGDSklearn:
         self.bernoulliResults = []
         self.bagOfWordsGridSearch = []
         self.bernoulliGridSearch = []
-    
+
     def _splitTrainAndValidation(self, dataSet):
-        XTrain, XValidation, YTrain, YValidation = train_test_split(dataSet[:, :-1], dataSet[:, -1], test_size=0.3, stratify=dataSet[:, -1], random_state=80)
+        XTrain, XValidation, YTrain, YValidation = train_test_split(
+            dataSet[:, :-1], dataSet[:, -1], test_size=0.3, stratify=dataSet[:, -1], random_state=80)
         return np.hstack((XTrain, YTrain.reshape(-1, 1))), np.hstack((XValidation, YValidation.reshape(-1, 1)))
+
     def search(self, trainData, testData):
-        sgdClassifier = SGDClassifier(loss="log_loss", learning_rate="constant", eta0=0.01, random_state=80)
-        gridSearch = GridSearchCV(sgdClassifier, self.paramGrid, scoring=self.scoring, refit="f1_score", n_jobs=-1)
+        sgdClassifier = SGDClassifier(
+            loss="log_loss", learning_rate="constant", eta0=0.01, random_state=80)
+        gridSearch = GridSearchCV(
+            sgdClassifier, self.paramGrid, scoring=self.scoring, refit="f1_score", n_jobs=-1)
         Train, Validation = self._splitTrainAndValidation(trainData)
         gridSearch.fit(Train[:, :-1], Train[:, -1])
         self.bestParams = gridSearch.best_params_
         if self._counter == 0:
             self.bagOfWordsBestClassifer = gridSearch.best_estimator_
-            self.bagOfWordsResults = self._calc(testData[:, -1], self.bagOfWordsBestClassifer.predict(testData[:, :-1]))
-            self.bagOfWordsGridSearch = self._calc(Validation[:,-1], gridSearch.best_estimator_.predict(Validation[:, :-1]))
+            self.bagOfWordsResults = self._calc(
+                testData[:, -1], self.bagOfWordsBestClassifer.predict(testData[:, :-1]))
+            self.bagOfWordsGridSearch = self._calc(
+                Validation[:, -1], gridSearch.best_estimator_.predict(Validation[:, :-1]))
         else:
             self.bernoulliBestClassifier = gridSearch.best_estimator_
-            self.bernoulliResults = self._calc(testData[:, -1], self.bernoulliBestClassifier.predict(testData[:, :-1]))
-            self.bernoulliGridSearch = self._calc(Validation[:,-1], gridSearch.best_estimator_.predict(Validation[:, :-1]))
+            self.bernoulliResults = self._calc(
+                testData[:, -1], self.bernoulliBestClassifier.predict(testData[:, :-1]))
+            self.bernoulliGridSearch = self._calc(
+                Validation[:, -1], gridSearch.best_estimator_.predict(Validation[:, :-1]))
         self._counter += 1
+
     def _calc(self, Y, YPred):
         accuracy = accuracy_score(Y, YPred)
-        precision = precision_score(Y, YPred, zero_division=0.0, average="binary")
+        precision = precision_score(
+            Y, YPred, zero_division=0.0, average="binary")
         recall = recall_score(Y, YPred, average="binary")
-        fscore = f1_score(Y, YPred, average="binary")
+        fscore = f1_score(Y, YPred, zero_division=0.0, average="binary")
         temp = [accuracy, precision, recall, fscore]
         return [round(_, 3) for _ in temp]
 
-        
-        
-        
-        
-
 
 def deleteFiles():
-    allZipFiles = glob.glob(os.path.join("./", "enron*")) + glob.glob(os.path.join("./", "*sets"))
+    allZipFiles = glob.glob(os.path.join("./", "enron*")) + \
+        glob.glob(os.path.join("./", "*sets"))
     # folder = glob.glob(os.path.join("./", "project1*"))
     for aFile in allZipFiles:
         if aFile.endswith("datasets"):
@@ -368,15 +435,17 @@ def deleteFiles():
         else:
             os.remove(aFile)
 
+
 def main():
     extracted = dataExtracter("project1_datasets")
     extracted.readData()
     deleteFiles()
     filePath = "./results.txt"
-    parametersMap = {"enron1": {"BW": [0.06, 0.5, 450], "BNL": [0.02, 0.5, 150]}, "enron2": {"BW": [0.1, 0.5, 450], "BNL": [0.4, 0.01, 450]}, "enron4": {"BW": [0.2, 0.001, 150], "BNL": [0.2, 0.5, 50]}}
+    parametersMap = {"enron1": {"BW": [0.06, 0.5, 450], "BNL": [0.02, 0.5, 150]}, "enron2": {"BW": [
+        0.1, 0.5, 450], "BNL": [0.4, 0.01, 450]}, "enron4": {"BW": [0.2, 0.001, 150], "BNL": [0.2, 0.5, 50]}}
     with open(filePath, "w") as file:
-        sys.stdout = file 
-        print("Note: The elements in the result list are in accuracy, precision, recall and fscore.")
+        sys.stdout = file
+        print("Note: The elements in the result list are in the order of accuracy, precision, recall and fscore.")
         for dataSetPrefix in ["enron1", "enron2", "enron4"]:
             print(f"For the dataSet with the prefix {dataSetPrefix}:")
             dataSet = extracted.allData[dataSetPrefix]
@@ -386,7 +455,7 @@ def main():
             multiNB.train()
             multiNB.test()
             print(f"multinomial NB results: {multiNB.testResults}")
-            
+
             print()
             berNB = bernoulliNB(dataSetRep)
             berNB.train()
@@ -396,11 +465,15 @@ def main():
 
             LR = mcapLR(dataSetRep, dataSetPrefix)
             LR.gridSearch(LR.trainDataBagOfWords, LR.bagOfWordParametersTuning)
-            LRresult1 = LR.trainUsingTunedParams(parametersMap[dataSetPrefix]["BW"][0], parametersMap[dataSetPrefix]["BW"][1], parametersMap[dataSetPrefix]["BW"][2], LR.trainDataBagOfWords, LR.testDataBagOfWords)
-            print(f"MCAP Logistic Regression results with L2 regularization for bag of words: {LRresult1}")
+            LRresult1 = LR.trainUsingTunedParams(parametersMap[dataSetPrefix]["BW"][0], parametersMap[dataSetPrefix]
+                                                 ["BW"][1], parametersMap[dataSetPrefix]["BW"][2], LR.trainDataBagOfWords, LR.testDataBagOfWords)
+            print(
+                f"MCAP Logistic Regression results with L2 regularization for bag of words: {LRresult1}")
             LR.gridSearch(LR.trainDataBernoulli, LR.bernoulliParametersTuning)
-            LRresult2 = LR.trainUsingTunedParams(parametersMap[dataSetPrefix]["BNL"][0], parametersMap[dataSetPrefix]["BNL"][1], parametersMap[dataSetPrefix]["BNL"][2], LR.trainDataBernoulli, LR.testDataBernoulli)
-            print(f"MCAP Logistic Regression results with L2 regularization for bernoulli: {LRresult2}")
+            LRresult2 = LR.trainUsingTunedParams(parametersMap[dataSetPrefix]["BNL"][0], parametersMap[dataSetPrefix]
+                                                 ["BNL"][1], parametersMap[dataSetPrefix]["BNL"][2], LR.trainDataBernoulli, LR.testDataBernoulli)
+            print(
+                f"MCAP Logistic Regression results with L2 regularization for bernoulli: {LRresult2}")
             LR.plotting(LR.bagOfWordParametersTuning)
             LR.plotting(LR.bernoulliParametersTuning)
 
@@ -418,6 +491,7 @@ def main():
             print(f"best params: {SGD.bestParams}")
             print()
         sys.stdout = sys.__stdout__
+
 
 if __name__ == "__main__":
     main()
