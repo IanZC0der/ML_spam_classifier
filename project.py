@@ -1,4 +1,5 @@
 import zipfile
+import sys
 import os
 import io
 import glob
@@ -310,10 +311,10 @@ class SGDSklearn:
         self.trainDataBagOfWords, self.testDataBagOfWords = mcapModel.trainDataBagOfWords, mcapModel.testDataBagOfWords
         self.trainDataBernoulli, self.testDataBernoulli = mcapModel.trainDataBernoulli, mcapModel.testDataBernoulli
         self.scoring = {
+            'f1_score': make_scorer(f1_score, average="binary"),
             'accuracy': make_scorer(accuracy_score),
             'precision': make_scorer(precision_score, zero_division=0.0, average="binary"),
             'recall': make_scorer(recall_score, average="binary"),
-            'f1_score': make_scorer(f1_score, average="binary"),
             'log_loss': make_scorer(log_loss, greater_is_better=False)
         }
         self.bagOfWordsBestClassifer = None
@@ -331,7 +332,7 @@ class SGDSklearn:
         return np.hstack((XTrain, YTrain.reshape(-1, 1))), np.hstack((XValidation, YValidation.reshape(-1, 1)))
     def search(self, trainData, testData):
         sgdClassifier = SGDClassifier(loss="log_loss", learning_rate="constant", eta0=0.01, random_state=80)
-        gridSearch = GridSearchCV(sgdClassifier, self.paramGrid, scoring=self.scoring, refit="log_loss", n_jobs=-1)
+        gridSearch = GridSearchCV(sgdClassifier, self.paramGrid, scoring=self.scoring, refit="f1_score", n_jobs=-1)
         Train, Validation = self._splitTrainAndValidation(trainData)
         gridSearch.fit(Train[:, :-1], Train[:, -1])
         self.bestParams = gridSearch.best_params_
@@ -366,40 +367,56 @@ def deleteFiles():
             os.rmdir(aFile)
         else:
             os.remove(aFile)
-    
+
 def main():
     extracted = dataExtracter("project1_datasets")
     extracted.readData()
     deleteFiles()
-    for dataSetPrefix in ["enron1", "enron2", "enron4"]:
-        print(f"For the dataSet with the prefix {dataSetPrefix}:")
-        dataSet = extracted.allData[dataSetPrefix]
-        dataSetRep = modelCreator()
-        dataSetRep.createRepresentations(dataSet)
-        multiNB = multiNomialNB(dataSetRep)
-        multiNB.train()
-        multiNB.test()
-        print(f"multinomial NB results: {multiNB.testResults}")
-        
-        berNB = bernoulliNB(dataSetRep)
-        berNB.train()
-        berNB.test()
-        print(f"Bernoulli NB results: {berNB.testResults}")
+    filePath = "./results.txt"
+    parametersMap = {"enron1": {"BW": [0.06, 0.5, 450], "BNL": [0.02, 0.5, 150]}, "enron2": {"BW": [0.1, 0.5, 450], "BNL": [0.4, 0.01, 450]}, "enron4": {"BW": [0.2, 0.001, 150], "BNL": [0.2, 0.5, 50]}}
+    with open(filePath, "w") as file:
+        sys.stdout = file 
+        for dataSetPrefix in ["enron1", "enron2", "enron4"]:
+            print(f"For the dataSet with the prefix {dataSetPrefix}:")
+            dataSet = extracted.allData[dataSetPrefix]
+            dataSetRep = modelCreator()
+            dataSetRep.createRepresentations(dataSet)
+            multiNB = multiNomialNB(dataSetRep)
+            multiNB.train()
+            multiNB.test()
+            print(f"multinomial NB results: {multiNB.testResults}")
+            
+            print()
+            berNB = bernoulliNB(dataSetRep)
+            berNB.train()
+            berNB.test()
+            print(f"Bernoulli NB results: {berNB.testResults}")
+            print()
 
-        LR = mcapLR(dataSet1Rep, dataSetPrefix)
-        LR.gridSearch(LR.trainDataBagOfWords, LR.bagOfWordParametersTuning)
-        LR.gridSearch(LR.trainDataBernoulli, LR.bernoulliParametersTuning)
-        LR.plotting(LR.bagOfWordParametersTuning)
-        LR.plotting(LR.bernoulliParametersTuning)
-        SGD = SGDSklearn(LR)
-        SGD.search(SGD.trainDataBagOfWords, SGD.testDataBagOfWords)
-        print("Results using SGD classifier for the bag of words representation:")
-        print(f"train result:{SGD.bagOfWordsGridSearch}")
-        print(f"test: {SGD.bagOfWordsResults}")
-        print(f"best params: {SGD.bestParams}")
-        SGD.search(SGD.trainDataBernoulli, SGD.testDataBernoulli)
-        print("Results using SGD classifier for the Bernoulli representation:")
-        print(f"train result:{SGD.bernoulliGridSearch}")
-        print(f"test: {SGD.bernoulliResults}")
-        print(f"best params: {SGD.bestParams}")
+            LR = mcapLR(dataSetRep, dataSetPrefix)
+            LR.gridSearch(LR.trainDataBagOfWords, LR.bagOfWordParametersTuning)
+            LRresult1 = LR.trainUsingTunedParams(parametersMap[dataSetPrefix]["BW"][0], parametersMap[dataSetPrefix]["BW"][1], parametersMap[dataSetPrefix]["BW"][2], LR.trainDataBagOfWords, LR.testDataBagOfWords)
+            print(f"MCAP Logistic Regression results with L2 regularization for bag of words: {LRresult1}")
+            LR.gridSearch(LR.trainDataBernoulli, LR.bernoulliParametersTuning)
+            LRresult2 = LR.trainUsingTunedParams(parametersMap[dataSetPrefix]["BNL"][0], parametersMap[dataSetPrefix]["BNL"][1], parametersMap[dataSetPrefix]["BNL"][2], LR.trainDataBernoulli, LR.testDataBernoulli)
+            print(f"MCAP Logistic Regression results with L2 regularization for bernoulli: {LRresult2}")
+            LR.plotting(LR.bagOfWordParametersTuning)
+            LR.plotting(LR.bernoulliParametersTuning)
 
+            SGD = SGDSklearn(LR)
+            SGD.search(SGD.trainDataBagOfWords, SGD.testDataBagOfWords)
+            print("Results using SGD classifier for the bag of words representation:")
+            print(f"Validation result:{SGD.bagOfWordsGridSearch}")
+            print(f"test: {SGD.bagOfWordsResults}")
+            print(f"best params: {SGD.bestParams}")
+            print()
+            SGD.search(SGD.trainDataBernoulli, SGD.testDataBernoulli)
+            print("Results using SGD classifier for the Bernoulli representation:")
+            print(f"Validation result:{SGD.bernoulliGridSearch}")
+            print(f"test: {SGD.bernoulliResults}")
+            print(f"best params: {SGD.bestParams}")
+            print()
+        sys.stdout = sys.__stdout__
+
+if __name__ == "__main__":
+    main()
