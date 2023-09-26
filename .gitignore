@@ -5,3 +5,5 @@ __MACOSX
 */
 *.png
 *.txt
+*html
+*pdf
